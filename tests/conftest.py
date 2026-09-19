@@ -56,6 +56,36 @@ def recorded_log(monkeypatch):
 
 
 @pytest.fixture
+def distinct_subagents(monkeypatch):
+    """Each domain gets its own recording stub — for testing per-domain routing."""
+    call_log: dict[str, list[dict]] = {
+        "billing": [],
+        "technical": [],
+        "refund": [],
+    }
+
+    def make_stub(domain):
+        def stub(ticket, classification):
+            call_log[domain].append(
+                {"ticket": ticket, "classification": classification}
+            )
+            return SubagentResult(
+                status="resolved", reply_draft=f"{domain} handled"
+            )
+
+        return stub
+
+    monkeypatch.setattr(
+        "ticket_triage.coordinator.SUBAGENTS",
+        {domain: make_stub(domain) for domain in call_log},
+    )
+    monkeypatch.setattr(
+        "ticket_triage.coordinator.log", lambda event, **fields: None
+    )
+    return call_log
+
+
+@pytest.fixture
 def observability_environment(monkeypatch):
     """Environment for observability contract tests — real escalate (so its log fires), captured log, queue-driven subagent."""
     events: list[dict] = []

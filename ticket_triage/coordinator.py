@@ -3,7 +3,17 @@ import os
 from datetime import datetime, timezone
 from typing import Callable
 
+from pydantic import BaseModel
+
 from ticket_triage.schemas import Classification, Reply, SubagentResult
+
+
+def _json_default(obj):
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
+    raise TypeError(
+        f"Object of type {type(obj).__name__} is not JSON serializable"
+    )
 
 CONFIDENCE_THRESHOLD = 0.7
 MAX_RETRIES = 2
@@ -57,7 +67,7 @@ def log(event: str, **fields) -> None:
         **fields,
     }
     with open(path, "a") as output_file:
-        output_file.write(json.dumps(entry) + "\n")
+        output_file.write(json.dumps(entry, default=_json_default) + "\n")
 
 
 def coordinator(ticket: str) -> Reply:

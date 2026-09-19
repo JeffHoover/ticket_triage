@@ -4,6 +4,7 @@ from datetime import datetime
 import pytest
 
 from ticket_triage.coordinator import log
+from ticket_triage.schemas import Classification
 
 
 @pytest.fixture
@@ -59,3 +60,18 @@ def test_log_defaults_to_project_relative_path_when_env_unset(
     assert default_path.exists()
     lines = read_lines(default_path)
     assert lines[0]["event"] == "received"
+
+
+def test_log_serializes_pydantic_model_field_as_nested_dict(log_path):
+    classification = Classification(
+        domain="billing", confidence=0.9, reasoning="clear signal"
+    )
+
+    log("escalated", classification=classification)
+
+    lines = read_lines(log_path)
+    assert lines[0]["classification"] == {
+        "domain": "billing",
+        "confidence": 0.9,
+        "reasoning": "clear signal",
+    }
