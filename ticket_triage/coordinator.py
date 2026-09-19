@@ -1,3 +1,6 @@
+import json
+import os
+from datetime import datetime, timezone
 from typing import Callable
 
 from ticket_triage.schemas import Classification, Reply, SubagentResult
@@ -47,7 +50,14 @@ def retry_or_escalate(
     return Reply(text=result.reply_draft, status=result.status)
 
 def log(event: str, **fields) -> None:
-    raise NotImplementedError
+    path = os.environ.get("TICKET_TRIAGE_LOG_PATH", "ticket_triage.log.jsonl")
+    entry = {
+        "event": event,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **fields,
+    }
+    with open(path, "a") as output_file:
+        output_file.write(json.dumps(entry) + "\n")
 
 
 def coordinator(ticket: str) -> Reply:
