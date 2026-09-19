@@ -40,6 +40,19 @@ Small product-docs knowledge base; technical subagent retrieves from it. Justify
 
 Local script with the Claude API + mock tools. No production infra.
 
+## Tools layer
+
+Tools are mock external system calls the subagents use to fetch grounded facts about a customer's situation — order details, refund status, etc. Without them, a subagent LLM would guess or hallucinate. In production each tool would hit a real service (order-management DB, refund-processing API); here they're Python functions with strict Pydantic schemas backed by in-memory mock data.
+
+**Why tools sit in their own layer:**
+- Tool schema is what the model sees when deciding whether/how to call — clean schemas → better tool-use accuracy.
+- Failure signals must be explicit and distinguishable (`order_not_found` vs. `system_down` vs. `malformed_input`) so the subagent can decide whether to retry, ask the customer, or escalate.
+- Tools swap easily: implementation changes (mock → Postgres → REST API) without touching subagent code.
+
+**Current tools** (in `ticket_triage/tools.py`):
+- `look_up_order(order_id)` — read-only. Returns `LookUpOrderSuccess | LookUpOrderFailure`.
+- `issue_refund` — planned; state-changing, richer failure modes.
+
 ## Committed conventions (load-bearing — changing means rewriting tests)
 
 - **Retry state parameter is `retry_count`, starting at 1.** Not `attempt` (off-by-one ambiguity).
@@ -49,13 +62,14 @@ Local script with the Claude API + mock tools. No production infra.
 - **Log events are structured JSON lines** with `event`, ISO-8601 UTC `timestamp`, and arbitrary fields. Pydantic models serialize via `.model_dump()`; unknown types raise `TypeError` (fail-loud, no silent `str()` fallback).
 - **Log path via `TICKET_TRIAGE_LOG_PATH` env var**, default `./ticket_triage.log.jsonl`.
 - **Test isolation via `monkeypatch`** — the coordinator's `classify`, `escalate`, `log`, and `SUBAGENTS` are all module-level and patched per-test. Fixtures in `tests/conftest.py`.
+- **Tool responses are tagged unions** (`ToolSuccess | ToolFailure` with `status: Literal[...]` discriminator), not exceptions. Structured returns match MCP's over-the-wire shape — every call yields a response object regardless of outcome, and what the tool writes is what the model eventually sees.
 
 ## Status
 
 | # | Pillar | Status | Notes |
 |---|---|---|---|
 | 1 | Coordinator/subagent orchestration | Partial | Coordinator done + tested. Subagents are stubs. |
-| 2 | MCP tool design | Not started | — |
+| 2 | MCP tool design | Partial | `look_up_order` implemented + tested (tagged-union response). `issue_refund` and MCP server plumbing pending. |
 | 3 | Structured output + validation | Partial | Schemas defined. LLM-facing validation-retry loop pending real API calls. |
 | 4 | Escalation gates | Done | Gates + `escalate` + `retry_or_escalate` tested. |
 | 5 | Context management + prompt caching | Not started | Needs real API calls. |
@@ -63,4 +77,4 @@ Local script with the Claude API + mock tools. No production infra.
 | 7 | Observability / governance | Done | JSON-lines `log()` + Pydantic serialization + contract tests. |
 | — | Optional RAG (Professional tier) | Not started | — |
 
-29 tests across gates, dispatch, escalate, retry, observability, and log.
+32 tests across gates, dispatch, escalate, retry, observability, log, and look_up_order.
