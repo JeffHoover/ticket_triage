@@ -9,8 +9,10 @@ Requires Python 3.14 (Homebrew).
 ```
 python3 -m venv .venv
 source .venv/bin/activate
-pip install pytest pydantic
+pip install pytest pydantic anthropic
 ```
+
+The `anthropic` SDK is required for the subagents. Set `ANTHROPIC_API_KEY` in your environment for real API calls; unit tests mock the client, so tests run without a key.
 
 Optional dev tools (coverage and mutation testing):
 
