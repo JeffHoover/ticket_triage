@@ -50,8 +50,8 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 - Tools swap easily: implementation changes (mock → Postgres → REST API) without touching subagent code.
 
 **Current tools** (in `ticket_triage/tools.py`):
-- `look_up_order(order_id)` — read-only. Returns `LookUpOrderSuccess | LookUpOrderFailure`.
-- `issue_refund` — planned; state-changing, richer failure modes.
+- `look_up_order(order_id)` — read-only. Returns `LookUpOrderSuccess | LookUpOrderFailure`. Failure code: `order_not_found`.
+- `issue_refund(order_id, amount, reason)` — state-changing. Returns `IssueRefundSuccess | IssueRefundFailure`. Failure codes: `order_not_found`, `already_refunded`, `refund_exceeds_order_total`.
 
 ## Committed conventions (load-bearing — changing means rewriting tests)
 
@@ -70,7 +70,7 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 | # | Pillar | Status | Notes |
 |---|---|---|---|
 | 1 | Coordinator/subagent orchestration | Partial | Coordinator done + tested. Subagents are stubs. |
-| 2 | MCP tool design | Partial | `look_up_order` implemented + tested (tagged-union response). `issue_refund` and MCP server plumbing pending. |
+| 2 | MCP tool design | Partial | Both mock tools (`look_up_order`, `issue_refund`) implemented + tested (tagged-union responses). MCP server plumbing pending — subagents will call tools as Python functions initially. |
 | 3 | Structured output + validation | Partial | Schemas defined. LLM-facing validation-retry loop pending real API calls. |
 | 4 | Escalation gates | Done | Gates + `escalate` + `retry_or_escalate` tested. |
 | 5 | Context management + prompt caching | Not started | Needs real API calls. |
@@ -78,4 +78,4 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 | 7 | Observability / governance | Done | JSON-lines `log()` + Pydantic serialization + contract tests. |
 | — | Optional RAG (Professional tier) | Not started | — |
 
-32 tests across gates, dispatch, escalate, retry, observability, log, and look_up_order.
+37 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, and issue_refund. Coverage 98% line, 86% mutation kill rate (see README for how to run).
