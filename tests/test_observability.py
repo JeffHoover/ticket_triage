@@ -18,11 +18,11 @@ def test_happy_path_emits_received_classified_returned(
 
     coordinator("ticket text")
 
-    assert event_names(observability_environment["events"]) == [
-        "received",
-        "classified",
-        "returned",
-    ]
+    events = observability_environment["events"]
+    assert event_names(events) == ["received", "classified", "returned"]
+    assert events[0]["ticket"] == "ticket text"
+    assert events[1]["domain"] == "billing"
+    assert events[2]["domain"] == "billing"
 
 
 def test_low_confidence_gate_emits_received_classified_escalated(

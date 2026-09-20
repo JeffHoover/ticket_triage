@@ -45,6 +45,7 @@ def test_exhausted_retries_escalate_with_repeated_failure(retry_environment):
     assert len(retry_environment["subagent_calls"]) == MAX_RETRIES
     assert len(retry_environment["escalate_calls"]) == 1
     escalate_call = retry_environment["escalate_calls"][0]
+    assert escalate_call["ticket"] == "ticket text"
     assert escalate_call["reason"] == "repeated_failure"
     assert escalate_call["attempts"] == MAX_RETRIES + 1
     assert escalate_call["classification"] == CLASSIFICATION

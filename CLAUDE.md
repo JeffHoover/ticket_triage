@@ -63,6 +63,7 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 - **Log path via `TICKET_TRIAGE_LOG_PATH` env var**, default `./ticket_triage.log.jsonl`.
 - **Test isolation via `monkeypatch`** — the coordinator's `classify`, `escalate`, `log`, and `SUBAGENTS` are all module-level and patched per-test. Fixtures in `tests/conftest.py`.
 - **Tool responses are tagged unions** (`ToolSuccess | ToolFailure` with `status: Literal[...]` discriminator), not exceptions. Structured returns match MCP's over-the-wire shape — every call yields a response object regardless of outcome, and what the tool writes is what the model eventually sees.
+- **`issue_refund` uses dedup-by-state for duplicate protection** — a repeat call on an already-refunded order returns `already_refunded`. **In production this would be idempotency keys** (caller-supplied unique key → server stores original response for that key, replays on repeat). Idempotency keys handle network retries cleanly and support partial refunds; the mock uses simpler by-state dedup because our LLM caller doesn't yet have retry semantics and one-refund-per-order is enough for the demo.
 
 ## Status
 
