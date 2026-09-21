@@ -69,13 +69,13 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 
 | # | Pillar | Status | Notes |
 |---|---|---|---|
-| 1 | Coordinator/subagent orchestration | Partial | Coordinator done + tested. Subagents are stubs. |
-| 2 | MCP tool design | Partial | Both mock tools (`look_up_order`, `issue_refund`) implemented + tested (tagged-union responses). MCP server plumbing pending — subagents will call tools as Python functions initially. |
-| 3 | Structured output + validation | Partial | Schemas defined. LLM-facing validation-retry loop pending real API calls. |
+| 1 | Coordinator/subagent orchestration | Done | All three subagents (billing, technical, refund) implemented + tested. Coordinator dispatches to all three. E2E tests cover each domain. |
+| 2 | MCP tool design | Done | Both mock tools implemented + tested. MCP server with `look_up_order` and `issue_refund` wrappers. Stateless wrapper pattern via injectable `_refunded_orders`. |
+| 3 | Structured output + validation | Done | `submit_response` tool pattern forces structured output. Validation-retry loop (up to `MAX_VALIDATION_RETRIES`) + `failed` fallback. Tested with mock client. |
 | 4 | Escalation gates | Done | Gates + `escalate` + `retry_or_escalate` tested. |
-| 5 | Context management + prompt caching | Not started | Needs real API calls. |
-| 6 | Claude Code config (this file + hooks + slash commands) | Partial | This file exists. No hooks or custom commands yet. |
+| 5 | Context management + prompt caching | Partial | Prompt caching on system prompt + tool defs (`cache_control: ephemeral`) in all subagents. Conversation history cap not yet implemented. |
+| 6 | Claude Code config (this file + hooks + slash commands) | Done | This file. `issue_refund` dollar-threshold hook in `hooks/refund_threshold.py` + wired in `.claude/settings.json`. `/triage` slash command in `.claude/agents/triage.md`. |
 | 7 | Observability / governance | Done | JSON-lines `log()` + Pydantic serialization + contract tests. |
 | — | Optional RAG (Professional tier) | Not started | — |
 
-37 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, and issue_refund. Coverage 98% line, 86% mutation kill rate (see README for how to run).
+53 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, and e2e dispatch. Coverage and mutation kill rate not yet re-measured (see README for how to run).
