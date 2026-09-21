@@ -80,7 +80,10 @@ _REFUNDED_ORDERS: set[str] = set()
 
 def issue_refund(
     request: IssueRefundInput,
+    *,
+    _refunded_orders: set[str] | None = None,
 ) -> IssueRefundSuccess | IssueRefundFailure:
+    refunded = _refunded_orders if _refunded_orders is not None else _REFUNDED_ORDERS
     order = _ORDERS.get(request.order_id)
     if order is None:
         return IssueRefundFailure(
@@ -89,7 +92,7 @@ def issue_refund(
                 message=f"Order '{request.order_id}' not found",
             )
         )
-    if request.order_id in _REFUNDED_ORDERS:
+    if request.order_id in refunded:
         return IssueRefundFailure(
             error=ToolError(
                 code="already_refunded",
@@ -106,7 +109,7 @@ def issue_refund(
                 ),
             )
         )
-    _REFUNDED_ORDERS.add(request.order_id)
+    refunded.add(request.order_id)
     return IssueRefundSuccess(
         refund=Refund(
             refund_id=f"REF-{request.order_id}",
