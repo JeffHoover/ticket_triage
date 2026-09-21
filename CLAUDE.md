@@ -65,6 +65,14 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 - **Tool responses are tagged unions** (`ToolSuccess | ToolFailure` with `status: Literal[...]` discriminator), not exceptions. Structured returns match MCP's over-the-wire shape — every call yields a response object regardless of outcome, and what the tool writes is what the model eventually sees.
 - **`issue_refund` uses dedup-by-state for duplicate protection** — a repeat call on an already-refunded order returns `already_refunded`. **In production this would be idempotency keys** (caller-supplied unique key → server stores original response for that key, replays on repeat). Idempotency keys handle network retries cleanly and support partial refunds; the mock uses simpler by-state dedup because our LLM caller doesn't yet have retry semantics and one-refund-per-order is enough for the demo.
 
+## Next up
+
+**Conversation history cap (completes Pillar 5).** The `_run_agent` loop in `ticket_triage/subagents.py` appends every turn to `messages` unboundedly. Add a cap: when `messages` exceeds a threshold (e.g. 10 turns), drop the oldest tool-result pairs (keep the initial user message and the most recent N turns). Write a failing test first — the test should call `_run_agent` via a mock that forces many tool-use turns and assert the client is never called with more than the cap's worth of messages.
+
+Architectural decision to document in the test/code: why drop tool-result pairs (not arbitrary turns), and where the `cache_control` checkpoint sits after truncation.
+
+After that: optional RAG component, then exam prep review.
+
 ## Status
 
 | # | Pillar | Status | Notes |
@@ -73,9 +81,9 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 | 2 | MCP tool design | Done | Both mock tools implemented + tested. MCP server with `look_up_order` and `issue_refund` wrappers. Stateless wrapper pattern via injectable `_refunded_orders`. |
 | 3 | Structured output + validation | Done | `submit_response` tool pattern forces structured output. Validation-retry loop (up to `MAX_VALIDATION_RETRIES`) + `failed` fallback. Tested with mock client. |
 | 4 | Escalation gates | Done | Gates + `escalate` + `retry_or_escalate` tested. |
-| 5 | Context management + prompt caching | Partial | Prompt caching on system prompt + tool defs (`cache_control: ephemeral`) in all subagents. Conversation history cap not yet implemented. |
+| 5 | Context management + prompt caching | Done | Prompt caching on system prompt + tool defs (`cache_control: ephemeral`) in all subagents. Conversation history cap: drops oldest assistant+tool-result pairs when `messages` exceeds `MAX_HISTORY_MESSAGES = 10`, preserving `messages[0]` and role alternation. |
 | 6 | Claude Code config (this file + hooks + slash commands) | Done | This file. `issue_refund` dollar-threshold hook in `hooks/refund_threshold.py` + wired in `.claude/settings.json`. `/triage` slash command in `.claude/agents/triage.md`. |
 | 7 | Observability / governance | Done | JSON-lines `log()` + Pydantic serialization + contract tests. |
 | — | Optional RAG (Professional tier) | Not started | — |
 
-53 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, and e2e dispatch. Coverage and mutation kill rate not yet re-measured (see README for how to run).
+69 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, and e2e dispatch. Coverage and mutation kill rate not yet re-measured (see README for how to run).

@@ -13,6 +13,10 @@ RESPONSE_TOOL_NAME = "submit_response"
 BILLING_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 1024
 MAX_VALIDATION_RETRIES = 2
+# Max messages passed to the API per turn. When exceeded, oldest
+# assistant+tool-result pairs are dropped to keep the context bounded while
+# preserving messages[0] (the original ticket) and role alternation.
+MAX_HISTORY_MESSAGES = 10
 
 BILLING_SYSTEM_PROMPT = (
     "You are a billing support specialist. Use the available tools to look "
@@ -152,6 +156,9 @@ def _run_agent(
             )
 
         messages.append({"role": "user", "content": tool_results})
+
+        while len(messages) > MAX_HISTORY_MESSAGES:
+            del messages[1:3] # Remove the oldest assistant+tool-result pair, preserving messages[0] (the original ticket) and role alternation.
 
 
 def billing_agent(ticket: str, classification: Classification) -> SubagentResult:
