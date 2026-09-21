@@ -2,9 +2,13 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from ticket_triage.schemas import Classification, SubagentResult
+from ticket_triage.rag import search_docs as _search_docs
 from ticket_triage.tools import (
     IssueRefundInput,
     LookUpOrderInput,
+    SearchDocsChunk,
+    SearchDocsInput,
+    SearchDocsResult,
     issue_refund,
     look_up_order,
 )
@@ -59,9 +63,24 @@ _BILLING_TOOL_REGISTRY = {
     "issue_refund": (IssueRefundInput, issue_refund),
 }
 
-_TECHNICAL_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _RESPONSE_TOOL_DEF]
+_SEARCH_DOCS_DEF = {
+    "name": "search_docs",
+    "description": (
+        "Search the product documentation for information relevant to this ticket. "
+        "Call this when you need grounding from policy or known-issue docs before responding."
+    ),
+    "input_schema": SearchDocsInput.model_json_schema(),
+}
+
+_TECHNICAL_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _SEARCH_DOCS_DEF, _RESPONSE_TOOL_DEF]
 _TECHNICAL_TOOL_REGISTRY = {
     "look_up_order": (LookUpOrderInput, look_up_order),
+    "search_docs": (
+        SearchDocsInput,
+        lambda req: SearchDocsResult(
+            chunks=[SearchDocsChunk(**chunk) for chunk in _search_docs(req.query)]
+        ),
+    ),
 }
 
 def _get_client() -> Anthropic:

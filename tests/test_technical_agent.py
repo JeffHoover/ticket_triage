@@ -14,6 +14,8 @@ from ticket_triage.schemas import Classification, SubagentResult
 from ticket_triage.subagents import (
     MAX_VALIDATION_RETRIES,
     RESPONSE_TOOL_NAME,
+    billing_agent,
+    refund_agent,
     technical_agent,
 )
 
@@ -188,3 +190,56 @@ def test_technical_agent_does_not_have_issue_refund_tool(monkeypatch):
     tool_names = {t["name"] for t in kwargs["tools"]}
     assert "issue_refund" not in tool_names
     assert "look_up_order" in tool_names
+
+
+def _resolved_response():
+    return _message_response(
+        content_blocks=[
+            _tool_use_block(
+                name=RESPONSE_TOOL_NAME,
+                tool_input={"status": "resolved", "reply_draft": "Done.", "evidence": []},
+            )
+        ],
+        stop_reason="tool_use",
+    )
+
+
+def test_technical_agent_includes_search_docs_tool(monkeypatch):
+    """search_docs is wired into the technical subagent — it is the only subagent
+    with access to product-doc retrieval."""
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _resolved_response()
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    technical_agent("ticket", CLASSIFICATION)
+
+    tool_names = {t["name"] for t in fake_client.messages.create.call_args.kwargs["tools"]}
+    assert "search_docs" in tool_names
+
+
+def test_billing_agent_does_not_include_search_docs_tool(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _resolved_response()
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_classification = Classification(
+        domain="billing", confidence=0.9, reasoning="billing"
+    )
+    billing_agent("ticket", billing_classification)
+
+    tool_names = {t["name"] for t in fake_client.messages.create.call_args.kwargs["tools"]}
+    assert "search_docs" not in tool_names
+
+
+def test_refund_agent_does_not_include_search_docs_tool(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _resolved_response()
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    refund_classification = Classification(
+        domain="refund", confidence=0.9, reasoning="refund"
+    )
+    refund_agent("ticket", refund_classification)
+
+    tool_names = {t["name"] for t in fake_client.messages.create.call_args.kwargs["tools"]}
+    assert "search_docs" not in tool_names

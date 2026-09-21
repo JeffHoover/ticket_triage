@@ -95,3 +95,51 @@ def test_coordinator_dispatches_refund_ticket_end_to_end(
 
     assert reply.status == "resolved"
     assert reply.text == "Refund approved."
+
+
+def test_technical_agent_calls_search_docs_then_resolves_end_to_end(
+    monkeypatch, install_classify, recorded_log
+):
+    """Technical subagent retrieves from product docs before responding.
+    Verifies the full loop: coordinator → technical subagent → search_docs
+    tool call → submit_response."""
+    install_classify(
+        Classification(domain="technical", confidence=0.9, reasoning="login issue")
+    )
+
+    fake_client = MagicMock()
+    fake_client.messages.create.side_effect = [
+        SimpleNamespace(
+            content=[
+                SimpleNamespace(
+                    type="tool_use",
+                    name="search_docs",
+                    input={"query": "cannot log in to my account"},
+                    id="tool-search",
+                )
+            ],
+            stop_reason="tool_use",
+        ),
+        SimpleNamespace(
+            content=[
+                SimpleNamespace(
+                    type="tool_use",
+                    name=RESPONSE_TOOL_NAME,
+                    input={
+                        "status": "resolved",
+                        "reply_draft": "Per our docs, locked accounts unlock after 30 minutes.",
+                        "evidence": [],
+                    },
+                    id="tool-response",
+                )
+            ],
+            stop_reason="tool_use",
+        ),
+    ]
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    reply = coordinator("I cannot log in to my account")
+
+    assert reply.status == "resolved"
+    assert reply.text == "Per our docs, locked accounts unlock after 30 minutes."
+    assert fake_client.messages.create.call_count == 2

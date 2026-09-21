@@ -53,6 +53,19 @@ def look_up_order(
     return LookUpOrderSuccess(order=order)
 
 
+class SearchDocsInput(BaseModel):
+    query: str = Field(min_length=1)
+
+
+class SearchDocsChunk(BaseModel):
+    text: str
+    source: str
+
+
+class SearchDocsResult(BaseModel):
+    chunks: list[SearchDocsChunk]
+
+
 class IssueRefundInput(BaseModel):
     order_id: str = Field(min_length=1)
     amount: float = Field(gt=0)

@@ -67,11 +67,7 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 
 ## Next up
 
-**Conversation history cap (completes Pillar 5).** The `_run_agent` loop in `ticket_triage/subagents.py` appends every turn to `messages` unboundedly. Add a cap: when `messages` exceeds a threshold (e.g. 10 turns), drop the oldest tool-result pairs (keep the initial user message and the most recent N turns). Write a failing test first — the test should call `_run_agent` via a mock that forces many tool-use turns and assert the client is never called with more than the cap's worth of messages.
-
-Architectural decision to document in the test/code: why drop tool-result pairs (not arbitrary turns), and where the `cache_control` checkpoint sits after truncation.
-
-After that: optional RAG component, then exam prep review.
+All pillars complete. Next: exam prep review.
 
 ## Status
 
@@ -84,6 +80,6 @@ After that: optional RAG component, then exam prep review.
 | 5 | Context management + prompt caching | Done | Prompt caching on system prompt + tool defs (`cache_control: ephemeral`) in all subagents. Conversation history cap: drops oldest assistant+tool-result pairs when `messages` exceeds `MAX_HISTORY_MESSAGES = 10`, preserving `messages[0]` and role alternation. |
 | 6 | Claude Code config (this file + hooks + slash commands) | Done | This file. `issue_refund` dollar-threshold hook in `hooks/refund_threshold.py` + wired in `.claude/settings.json`. `/triage` slash command in `.claude/agents/triage.md`. |
 | 7 | Observability / governance | Done | JSON-lines `log()` + Pydantic serialization + contract tests. |
-| — | Optional RAG (Professional tier) | Not started | — |
+| 8 | RAG component (Professional tier) | Done | Product-docs corpus in `ticket_triage/docs.py`, paragraph-level chunking, ChromaDB in-memory collection in `ticket_triage/rag.py`. `search_docs` tool wired into technical subagent only. Model decides when to retrieve (tool-call pattern, not always-inject). `SearchDocsResult` Pydantic wrapper keeps tool response shape consistent with other tools. |
 
-69 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, and e2e dispatch. Coverage and mutation kill rate not yet re-measured (see README for how to run).
+81 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, docs chunking, RAG retrieval, search_docs wiring, and e2e dispatch. Coverage and mutation kill rate not yet re-measured (see README for how to run).
