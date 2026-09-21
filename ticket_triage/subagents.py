@@ -58,11 +58,16 @@ def _build_tool_defs() -> list[dict]:
     ]
 
 
+def _cached_system(text: str) -> list[dict]:
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 def billing_agent(
     ticket: str, classification: Classification
 ) -> SubagentResult:
     client = _get_client()
     tools = _build_tool_defs()
+    tools[-1]["cache_control"] = {"type": "ephemeral"}
     messages = [
         {
             "role": "user",
@@ -77,7 +82,7 @@ def billing_agent(
         response = client.messages.create(
             model=BILLING_MODEL,
             max_tokens=MAX_TOKENS,
-            system=BILLING_SYSTEM_PROMPT,
+            system=_cached_system(BILLING_SYSTEM_PROMPT),
             tools=tools,
             messages=messages,
         )

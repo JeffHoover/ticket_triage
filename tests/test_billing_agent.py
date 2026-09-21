@@ -171,3 +171,26 @@ def test_billing_agent_raises_when_model_returns_no_tool_use(monkeypatch):
 
     with pytest.raises(RuntimeError):
         billing_agent("ticket", CLASSIFICATION)
+
+
+def test_billing_agent_sends_cached_system_prompt_and_tools(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _message_response(
+        content_blocks=[
+            _tool_use_block(
+                name=RESPONSE_TOOL_NAME,
+                tool_input={"status": "resolved", "reply_draft": "Done.", "evidence": []},
+            )
+        ],
+        stop_reason="tool_use",
+    )
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_agent("refund question", CLASSIFICATION)
+
+    kwargs = fake_client.messages.create.call_args.kwargs
+    system = kwargs["system"]
+    assert isinstance(system, list), "system must be a content-block list for cache_control"
+    assert system[-1]["cache_control"] == {"type": "ephemeral"}
+    tools = kwargs["tools"]
+    assert tools[-1]["cache_control"] == {"type": "ephemeral"}
