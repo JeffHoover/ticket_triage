@@ -74,7 +74,7 @@ All pillars complete. Next: exam prep review.
 | # | Pillar | Status | Notes |
 |---|---|---|---|
 | 1 | Coordinator/subagent orchestration | Done | All three subagents (billing, technical, refund) implemented + tested. Coordinator dispatches to all three. E2E tests cover each domain. |
-| 2 | MCP tool design | Done | Both mock tools implemented + tested. MCP server with `look_up_order` and `issue_refund` wrappers. Stateless wrapper pattern via injectable `_refunded_orders`. |
+| 2 | MCP tool design | Done | Two tools with strict Pydantic schemas and tagged-union responses (`ok`/`error` discriminator): `look_up_order` (read-only) and `issue_refund` (state-changing). Backed by in-memory data instead of real services; production would swap the backing store without touching tool schemas or subagent code. MCP server wraps both. Stateless wrapper pattern via injectable `_refunded_orders`. |
 | 3 | Structured output + validation | Done | `submit_response` tool pattern forces structured output. Validation-retry loop (up to `MAX_VALIDATION_RETRIES`) + `failed` fallback. Tested with mock client. |
 | 4 | Escalation gates | Done | Gates + `escalate` + `retry_or_escalate` tested. |
 | 5 | Context management + prompt caching | Done | Prompt caching on system prompt + tool defs (`cache_control: ephemeral`) in all subagents. Conversation history cap: drops oldest assistant+tool-result pairs when `messages` exceeds `MAX_HISTORY_MESSAGES = 10`, preserving `messages[0]` and role alternation. |
