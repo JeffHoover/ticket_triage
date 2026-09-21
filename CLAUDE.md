@@ -65,6 +65,34 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 - **Tool responses are tagged unions** (`ToolSuccess | ToolFailure` with `status: Literal[...]` discriminator), not exceptions. Structured returns match MCP's over-the-wire shape — every call yields a response object regardless of outcome, and what the tool writes is what the model eventually sees.
 - **`issue_refund` uses dedup-by-state for duplicate protection** — a repeat call on an already-refunded order returns `already_refunded`. **In production this would be idempotency keys** (caller-supplied unique key → server stores original response for that key, replays on repeat). Idempotency keys handle network retries cleanly and support partial refunds; the mock uses simpler by-state dedup because our LLM caller doesn't yet have retry semantics and one-refund-per-order is enough for the demo.
 
+## Slash Commands
+
+### `/triage <ticket text>`
+
+Routes a support ticket through the triage pipeline and explains each decision step by step. Invoke with `--help` or no arguments to print usage.
+
+**Steps walked through:**
+1. **Classify** — domain (`billing` / `technical` / `refund` / `unknown`) + confidence score
+2. **Gate check** — confidence ≥ 0.7 to proceed; below threshold escalates immediately
+3. **Subagent** — which agent handles it and which tools it would call
+4. **Outcome** — expected status (`resolved` / `needs_info` / `escalate`) + reply draft
+
+**Subagent tools:**
+
+| Subagent | Tools |
+|---|---|
+| billing | `look_up_order`, `issue_refund`, `submit_response` |
+| technical | `look_up_order`, `search_docs`, `submit_response` |
+| refund | `look_up_order`, `issue_refund`, `submit_response` |
+
+**Examples:**
+```
+/triage I was charged twice for order ORD-001
+/triage My app crashes every time I try to log in
+/triage I returned my item two weeks ago and still have no refund
+/triage --help
+```
+
 ## Next up
 
 All pillars complete. Next: exam prep review.
