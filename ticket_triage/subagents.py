@@ -20,11 +20,45 @@ BILLING_SYSTEM_PROMPT = (
     f"{RESPONSE_TOOL_NAME} tool with your final structured response."
 )
 
+TECHNICAL_SYSTEM_PROMPT = (
+    "You are a technical support specialist. Use the available tools to look "
+    "up order details that may be relevant to a technical issue. When you're "
+    f"done, call the {RESPONSE_TOOL_NAME} tool with your final structured response."
+)
+
 _client: Anthropic | None = None
 
-_TOOL_REGISTRY = {
+_LOOK_UP_ORDER_DEF = {
+    "name": "look_up_order",
+    "description": "Look up a customer's order by order_id.",
+    "input_schema": LookUpOrderInput.model_json_schema(),
+}
+
+_ISSUE_REFUND_DEF = {
+    "name": "issue_refund",
+    "description": "Issue a refund for an order.",
+    "input_schema": IssueRefundInput.model_json_schema(),
+}
+
+_RESPONSE_TOOL_DEF = {
+    "name": RESPONSE_TOOL_NAME,
+    "description": (
+        "Submit your final structured response. Call this exactly "
+        "once when you're done handling the ticket."
+    ),
+    "input_schema": SubagentResult.model_json_schema(),
+    "cache_control": {"type": "ephemeral"},
+}
+
+_BILLING_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _ISSUE_REFUND_DEF, _RESPONSE_TOOL_DEF]
+_BILLING_TOOL_REGISTRY = {
     "look_up_order": (LookUpOrderInput, look_up_order),
     "issue_refund": (IssueRefundInput, issue_refund),
+}
+
+_TECHNICAL_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _RESPONSE_TOOL_DEF]
+_TECHNICAL_TOOL_REGISTRY = {
+    "look_up_order": (LookUpOrderInput, look_up_order),
 }
 
 
@@ -35,45 +69,22 @@ def _get_client() -> Anthropic:
     return _client
 
 
-def _build_tool_defs() -> list[dict]:
-    return [
-        {
-            "name": "look_up_order",
-            "description": "Look up a customer's order by order_id.",
-            "input_schema": LookUpOrderInput.model_json_schema(),
-        },
-        {
-            "name": "issue_refund",
-            "description": "Issue a refund for an order.",
-            "input_schema": IssueRefundInput.model_json_schema(),
-        },
-        {
-            "name": RESPONSE_TOOL_NAME,
-            "description": (
-                "Submit your final structured response. Call this exactly "
-                "once when you're done handling the ticket."
-            ),
-            "input_schema": SubagentResult.model_json_schema(),
-        },
-    ]
-
-
 def _cached_system(text: str) -> list[dict]:
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
-def billing_agent(
-    ticket: str, classification: Classification
+def _run_agent(
+    ticket: str,
+    classification: Classification,
+    system_prompt: str,
+    tool_defs: list[dict],
+    tool_registry: dict,
 ) -> SubagentResult:
     client = _get_client()
-    tools = _build_tool_defs()
-    tools[-1]["cache_control"] = {"type": "ephemeral"}
     messages = [
         {
             "role": "user",
-            "content": (
-                f"{ticket}\n\n(routing reason: {classification.reasoning})"
-            ),
+            "content": f"{ticket}\n\n(routing reason: {classification.reasoning})",
         }
     ]
     validation_retries = 0
@@ -82,8 +93,8 @@ def billing_agent(
         response = client.messages.create(
             model=BILLING_MODEL,
             max_tokens=MAX_TOKENS,
-            system=_cached_system(BILLING_SYSTEM_PROMPT),
-            tools=tools,
+            system=_cached_system(system_prompt),
+            tools=tool_defs,
             messages=messages,
         )
 
@@ -92,11 +103,7 @@ def billing_agent(
         ]
 
         response_tool_call = next(
-            (
-                block
-                for block in tool_use_blocks
-                if block.name == RESPONSE_TOOL_NAME
-            ),
+            (block for block in tool_use_blocks if block.name == RESPONSE_TOOL_NAME),
             None,
         )
 
@@ -107,9 +114,7 @@ def billing_agent(
                 validation_retries += 1
                 if validation_retries > MAX_VALIDATION_RETRIES:
                     return SubagentResult(status="failed")
-                messages.append(
-                    {"role": "assistant", "content": response.content}
-                )
+                messages.append({"role": "assistant", "content": response.content})
                 messages.append(
                     {
                         "role": "user",
@@ -138,7 +143,7 @@ def billing_agent(
 
         tool_results = []
         for block in tool_use_blocks:
-            input_schema, tool_fn = _TOOL_REGISTRY[block.name]
+            input_schema, tool_fn = tool_registry[block.name]
             tool_output = tool_fn(input_schema(**block.input))
             tool_results.append(
                 {
@@ -149,3 +154,17 @@ def billing_agent(
             )
 
         messages.append({"role": "user", "content": tool_results})
+
+
+def billing_agent(ticket: str, classification: Classification) -> SubagentResult:
+    return _run_agent(
+        ticket, classification,
+        BILLING_SYSTEM_PROMPT, _BILLING_TOOL_DEFS, _BILLING_TOOL_REGISTRY,
+    )
+
+
+def technical_agent(ticket: str, classification: Classification) -> SubagentResult:
+    return _run_agent(
+        ticket, classification,
+        TECHNICAL_SYSTEM_PROMPT, _TECHNICAL_TOOL_DEFS, _TECHNICAL_TOOL_REGISTRY,
+    )
