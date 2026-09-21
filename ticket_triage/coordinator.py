@@ -6,7 +6,7 @@ from typing import Callable
 from pydantic import BaseModel
 
 from ticket_triage.schemas import Classification, Reply, SubagentResult
-from ticket_triage.subagents import billing_agent
+from ticket_triage.subagents import billing_agent, refund_agent, technical_agent
 
 
 def _json_default(obj):
@@ -19,7 +19,11 @@ def _json_default(obj):
 CONFIDENCE_THRESHOLD = 0.7
 MAX_RETRIES = 2
 
-SUBAGENTS: dict[str, Callable[..., SubagentResult]] = {"billing": billing_agent}
+SUBAGENTS: dict[str, Callable[..., SubagentResult]] = {
+    "billing": billing_agent,
+    "technical": technical_agent,
+    "refund": refund_agent,
+}
 
 
 def classify(ticket: str) -> Classification:

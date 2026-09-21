@@ -41,3 +41,57 @@ def test_coordinator_dispatches_billing_ticket_end_to_end(
     assert reply.status == "resolved"
     assert reply.text == "Refund processed."
     assert fake_client.messages.create.call_count == 1
+
+
+def test_coordinator_dispatches_technical_ticket_end_to_end(
+    monkeypatch, install_classify, recorded_log
+):
+    install_classify(
+        Classification(domain="technical", confidence=0.9, reasoning="connectivity issue")
+    )
+
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="tool_use",
+                name=RESPONSE_TOOL_NAME,
+                input={"status": "resolved", "reply_draft": "Issue diagnosed.", "evidence": []},
+                id="tool-1",
+            )
+        ],
+        stop_reason="tool_use",
+    )
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    reply = coordinator("App keeps crashing on login")
+
+    assert reply.status == "resolved"
+    assert reply.text == "Issue diagnosed."
+
+
+def test_coordinator_dispatches_refund_ticket_end_to_end(
+    monkeypatch, install_classify, recorded_log
+):
+    install_classify(
+        Classification(domain="refund", confidence=0.9, reasoning="refund eligibility")
+    )
+
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="tool_use",
+                name=RESPONSE_TOOL_NAME,
+                input={"status": "resolved", "reply_draft": "Refund approved.", "evidence": []},
+                id="tool-1",
+            )
+        ],
+        stop_reason="tool_use",
+    )
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    reply = coordinator("I want my money back for ORD-001")
+
+    assert reply.status == "resolved"
+    assert reply.text == "Refund approved."
