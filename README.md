@@ -35,7 +35,7 @@ pytest --cov=ticket_triage --cov-report=term-missing tests/
 mutmut run
 ```
 
-Current: 98% line coverage, 86% mutation kill rate (190/222). Remaining survivors are mostly error-message string mutations and a macOS case-insensitive-filesystem quirk on the default log path.
+Current: 98% line coverage, 74% mutation kill rate (284/384). `rag.py` is excluded from mutation testing — ChromaDB's module-level singleton is inherited by mutmut's forked workers, making mutations unreachable and causing suspicious exits from background threads (see `pyproject.toml`). Remaining survivors are mostly error-message string mutations in the coordinator.
 
 ## Run
 
@@ -56,4 +56,4 @@ Planned: `ticket_triage/subagents.py` (billing/technical/refund).
 
 ## Status
 
-Coordinator orchestration layer and both mock tools (`look_up_order`, `issue_refund`) complete. 37 tests, 98% line coverage, 86% mutation kill rate. Subagents, real Claude API integration, and prompt caching pending. See [CLAUDE.md](CLAUDE.md) for design reasoning and the pillar-by-pillar status table.
+All 8 pillars complete. 81 tests, 98% line coverage, 74% mutation kill rate (284/384, `rag.py` excluded). See [CLAUDE.md](CLAUDE.md) for design reasoning and the pillar-by-pillar status table.

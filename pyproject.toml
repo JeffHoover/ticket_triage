@@ -1,3 +1,7 @@
 [tool.mutmut]
 source_paths = ["ticket_triage/"]
 also_copy = ["hooks/"]
+# rag.py is excluded because ChromaDB's singleton (_collection) is inherited
+# by mutmut's forked worker processes, making build_collection mutations
+# unreachable and causing suspicious exits from ChromaDB's background threads.
+do_not_mutate = ["ticket_triage/rag.py"]
