@@ -1,6 +1,16 @@
+import sys
+from pathlib import Path
+
 import pytest
 
 from ticket_triage.schemas import Classification, Reply, SubagentResult
+
+# Find the project root by walking up until we find the `hooks/` directory.
+# A fixed parent.parent would resolve to mutants/ when mutmut runs tests,
+# so we search upward to stay correct regardless of nesting depth.
+_here = Path(__file__).resolve()
+_project_root = next(p for p in [_here, *_here.parents] if (p / "hooks").is_dir())
+sys.path.insert(0, str(_project_root))
 
 
 @pytest.fixture
