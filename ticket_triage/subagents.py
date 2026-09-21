@@ -19,7 +19,6 @@ BILLING_SYSTEM_PROMPT = (
     "up orders and issue refunds as needed. When you're done, call the "
     f"{RESPONSE_TOOL_NAME} tool with your final structured response."
 )
-
 TECHNICAL_SYSTEM_PROMPT = (
     "You are a technical support specialist. Use the available tools to look "
     "up order details that may be relevant to a technical issue. When you're "
@@ -60,7 +59,6 @@ _TECHNICAL_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _RESPONSE_TOOL_DEF]
 _TECHNICAL_TOOL_REGISTRY = {
     "look_up_order": (LookUpOrderInput, look_up_order),
 }
-
 
 def _get_client() -> Anthropic:
     global _client
@@ -167,4 +165,24 @@ def technical_agent(ticket: str, classification: Classification) -> SubagentResu
     return _run_agent(
         ticket, classification,
         TECHNICAL_SYSTEM_PROMPT, _TECHNICAL_TOOL_DEFS, _TECHNICAL_TOOL_REGISTRY,
+    )
+
+
+REFUND_SYSTEM_PROMPT = (
+    "You are a refund-eligibility specialist. Look up the order, determine "
+    "whether a refund is warranted, and issue it if eligible. When you're "
+    f"done, call the {RESPONSE_TOOL_NAME} tool with your final structured response."
+)
+
+_REFUND_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _ISSUE_REFUND_DEF, _RESPONSE_TOOL_DEF]
+_REFUND_TOOL_REGISTRY = {
+    "look_up_order": (LookUpOrderInput, look_up_order),
+    "issue_refund": (IssueRefundInput, issue_refund),
+}
+
+
+def refund_agent(ticket: str, classification: Classification) -> SubagentResult:
+    return _run_agent(
+        ticket, classification,
+        REFUND_SYSTEM_PROMPT, _REFUND_TOOL_DEFS, _REFUND_TOOL_REGISTRY,
     )
