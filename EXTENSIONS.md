@@ -17,6 +17,19 @@ Concepts not yet demonstrated by the project, ranked by exam signal-to-effort. M
 
 ---
 
+## 2. Evals harness
+
+**What:** A suite of golden-set tickets with expected outcomes (domain, confidence bracket, final status). Two check layers: deterministic (exact domain match, confidence ≥ threshold, reply non-empty) and LLM-as-judge (is the reply tone appropriate? does it address the customer's actual problem?).
+
+**Why it matters architecturally:**
+- Forces you to define what "correct" means for a probabilistic system — the hardest part.
+- LLM-as-judge vs. exact-match is a genuine tradeoff: judge catches nuance but adds cost and non-determinism; exact-match is cheap but can't score prose quality.
+- Failure taxonomy (wrong domain / right domain wrong action / right action bad tone) drives where you invest prompt-engineering effort.
+
+**Exam angle:** "How do you know your agent system works?" Evals are the answer. Know when each eval type is appropriate and what each one cannot catch.
+
+---
+
 ## 3. Batch API
 
 **What:** Replace the per-ticket synchronous call with Anthropic's Batch API for workloads that can tolerate latency (nightly reprocessing, backfill, bulk QA runs).
@@ -60,10 +73,10 @@ Concepts not yet demonstrated by the project, ranked by exam signal-to-effort. M
 
 | # | Addition | Exam signal | Effort |
 |---|---|---|---|
-| 1 | Evals harness | Very high | Medium |
-| 2 | Model routing | High | Low |
-| 3 | Extended thinking | High | Low |
-| 4 | Batch API | Medium | Medium |
+| 1 | Model routing | High | Low |
+| 2 | Evals harness | Very high | Medium |
+| 3 | Batch API | Medium | Medium |
+| 4 | Extended thinking | High | Low |
 | 5 | Prompt injection | Medium | Low |
 
 ---
