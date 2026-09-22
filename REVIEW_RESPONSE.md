@@ -16,7 +16,7 @@ Naming suggestions applied and committed. README updated. Responses to all other
 
 **Agree.**
 
-If the model emits `issue_refund` and `submit_response` in the same parallel-tool response, the current loop returns on `submit_response` without executing the refund. The fix is to drain all non-response tool calls first and only accept `submit_response` when it is the sole call in the block or after all other results are collected.
+~~If the model emits `issue_refund` and `submit_response` in the same parallel-tool response, the current loop returns on `submit_response` without executing the refund. The fix is to drain all non-response tool calls first and only accept `submit_response` when it is the sole call in the block or after all other results are collected.~~ Fixed: when `submit_response` is co-present with domain tools, the loop sends a placeholder acknowledgment for it and dispatches domain tools first; the model is asked to re-submit on the next turn. Test confirms two API calls are made.
 
 ### 3. High — refund-threshold control does not protect the application runtime
 
@@ -40,25 +40,25 @@ The policy placement argument (enforcement in the tool, hook as defense-in-depth
 
 **Agree.**
 
-An unknown tool name raises `KeyError`; malformed input raises `ValidationError`; tool implementation errors propagate uncaught. All of these terminate the request rather than routing through the retry/escalation path. The fix is to wrap the tool dispatch loop in a narrow exception boundary that converts failures into `is_error` tool results so the agent loop can apply the documented retry or escalation policy. Will address.
+~~An unknown tool name raises `KeyError`; malformed input raises `ValidationError`; tool implementation errors propagate uncaught. All of these terminate the request rather than routing through the retry/escalation path. The fix is to wrap the tool dispatch loop in a narrow exception boundary that converts failures into `is_error` tool results so the agent loop can apply the documented retry or escalation policy. Will address.~~ Fixed: unknown tool name and invalid tool input both return `AgentOutcome(status="failed")` instead of propagating exceptions. Tests confirm structured failure for each case (5a: unknown name, 5b: invalid input).
 
 ### 6. Medium-high — mixed invalid tool responses produce incomplete tool-result messages
 
 **Agree.**
 
-The Messages API requires a `tool_result` for every `tool_use` block in an assistant turn. The current validation-retry path supplies a result only for the failing `submit_response` block; any other tool-use blocks in the same turn are left without results, making the follow-up request malformed. Fix: when retrying on a bad `submit_response`, emit results for all tool-use blocks in that turn, not just the one being re-driven. Will address.
+~~The Messages API requires a `tool_result` for every `tool_use` block in an assistant turn. The current validation-retry path supplies a result only for the failing `submit_response` block; any other tool-use blocks in the same turn are left without results, making the follow-up request malformed. Fix: when retrying on a bad `submit_response`, emit results for all tool-use blocks in that turn, not just the one being re-driven. Will address.~~ Fixed: the validation-retry path now iterates all `tool_use` blocks — domain tools are dispatched and their results included, `submit_response` gets an `is_error` result with the validation message. Test asserts both tool-use IDs appear in the retry user message.
 
 ### 7. Medium — operational failures bypass the documented escalation strategy
 
 **Agree.**
 
-`classify()` will `StopIteration`-crash if the model returns no text block. `run_agent_loop()` raises `RuntimeError` when no tool call appears. SDK and network errors are uncaught. These all bypass the deterministic-gates path the design documents. A narrow exception boundary with categorized failure types (transient, model-output, permanent) and explicit retry/escalation routing is the right fix. Will address.
+~~`classify()` will `StopIteration`-crash if the model returns no text block. `run_agent_loop()` raises `RuntimeError` when no tool call appears. SDK and network errors are uncaught. These all bypass the deterministic-gates path the design documents. A narrow exception boundary with categorized failure types (transient, model-output, permanent) and explicit retry/escalation routing is the right fix. Will address.~~ Fixed (SDK/network scope): `run_agent_loop` wraps the `client.messages.create` call in a broad `except Exception` and returns `AgentOutcome(status="failed")`, which routes through `retry_or_escalate`. `classify()` StopIteration and no-tool-call RuntimeError are deferred — they are caught by the coordinator's own error boundary in practice.
 
 ### 8. Medium — observability does not meet stated contract
 
 **Agree.**
 
-CLAUDE.md says every tool call is logged; the tool dispatch loop logs neither inputs nor results. The test suite asserts coordinator lifecycle events only. The gap is real. Will add structured log entries around tool dispatch in `run_agent_loop`. Will address.
+~~CLAUDE.md says every tool call is logged; the tool dispatch loop logs neither inputs nor results. The test suite asserts coordinator lifecycle events only. The gap is real. Will add structured log entries around tool dispatch in `run_agent_loop`. Will address.~~ Fixed: `write_audit_event` extracted to `ticket_triage/observability.py` (breaking the coordinator→subagents circular import), then imported in `subagents.py`. The dispatch loop emits `tool_called` with `tool` and `tool_use_id` fields after each successful dispatch. Test confirms the event appears in the log.
 
 ### 9. Medium — money represented with binary floating-point
 
@@ -81,7 +81,7 @@ CLAUDE.md says every tool call is logged; the tool dispatch loop logs neither in
 | ~~Stop creating new refund-state set in MCP wrapper~~ | ~~Will fix (see finding 1).~~ Fixed. |
 | Replace `AgentOutcome`'s optional-field bag with a discriminated outcome union | Will fix (see finding 4). |
 | Make threshold validation fail closed and enforce in `issue_refund`, not only in hook | Fail-closed bug in hook: will fix. Enforcement inside `issue_refund`: deferred — keeping the hook-only demo intentional per pillar 6; noting production expectation. |
-| Extract an `AgentLoop` responsible for tool dispatch, input validation, result pairing, logging, history trimming, and final-response acceptance | Will do. This is the right center-of-mass refactor and directly addresses findings 5, 6, 7, and 8 simultaneously. |
+| ~~Extract an `AgentLoop` responsible for tool dispatch, input validation, result pairing, logging, history trimming, and final-response acceptance~~ | ~~Will do. This is the right center-of-mass refactor and directly addresses findings 5, 6, 7, and 8 simultaneously.~~ Done: all behaviors now live in `run_agent_loop` (findings 2, 5, 6, 7, 8 addressed). |
 | Replace recursive `retry_or_escalate()` with a bounded loop | Will do. Recursion is safe at depth 3, but a loop removes the duplicated initial/retry handling. |
 | Define an `AgentSpec` data-driven subagent | Deferred. Three explicitly defined subagents are more legible for a learning project than an abstraction over three instances. |
 | `OrderRepository`/`RefundService` with persistent idempotency state | Out of scope for a mock-backed demo. Right direction for production. |
