@@ -18,7 +18,7 @@ import sys
 THRESHOLD = 100.00
 
 
-def check(tool_name: str, tool_input: dict) -> tuple[bool, str]:
+def evaluate_refund_threshold(tool_name: str, tool_input: dict) -> tuple[bool, str]:
     """Return (allowed, reason). allowed=False causes the hook to block."""
     if tool_name != "issue_refund":
         return True, ""
@@ -34,7 +34,7 @@ def check(tool_name: str, tool_input: dict) -> tuple[bool, str]:
 
 def main() -> None:
     payload = json.load(sys.stdin)
-    allowed, reason = check(
+    allowed, reason = evaluate_refund_threshold(
         payload.get("tool_name", ""),
         payload.get("tool_input", {}),
     )

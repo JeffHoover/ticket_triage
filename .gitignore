@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# ONNX artifacts
+:memory:.ses
+
 # Virtual environment
 .venv/
 venv/

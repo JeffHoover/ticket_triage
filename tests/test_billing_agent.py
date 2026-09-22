@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ticket_triage.schemas import Classification, SubagentResult
+from ticket_triage.schemas import AgentOutcome, Classification
 from ticket_triage.subagents import (
     MAX_VALIDATION_RETRIES,
     RESPONSE_TOOL_NAME,
@@ -46,7 +46,7 @@ def test_billing_agent_returns_result_when_model_immediately_calls_response_tool
 
     result = billing_agent("I want a refund on ORD-001", CLASSIFICATION)
 
-    assert isinstance(result, SubagentResult)
+    assert isinstance(result, AgentOutcome)
     assert result.status == "resolved"
     assert result.reply_draft == "Your refund has been processed."
 
@@ -57,7 +57,7 @@ def test_billing_agent_executes_domain_tool_then_returns_response(monkeypatch):
         _message_response(
             content_blocks=[
                 _tool_use_block(
-                    name="look_up_order",
+                    name="find_order_by_id",
                     tool_input={"order_id": "ORD-001"},
                     block_id="tool-1",
                 )

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ticket_triage.schemas import Classification, Reply, SubagentResult
+from ticket_triage.schemas import AgentOutcome, Classification, TriageReply
 
 # Find the project root by walking up until we find the `hooks/` directory.
 # A fixed parent.parent would resolve to mutants/ when mutmut runs tests,
@@ -15,23 +15,23 @@ sys.path.insert(0, str(_project_root))
 
 @pytest.fixture
 def stubs(monkeypatch):
-    recorded = {"escalate": [], "log": [], "subagent": []}
+    recorded = {"escalate": [], "write_audit_event": [], "subagent": []}
 
     def fake_escalate(ticket, reason, **context):
         recorded["escalate"].append({"ticket": ticket, "reason": reason, **context})
-        return Reply(text=None, status="escalated", escalation_reason=reason)
+        return TriageReply(text=None, status="escalated", escalation_reason=reason)
 
-    def fake_log(event, **fields):
-        recorded["log"].append({"event": event, **fields})
+    def fake_write_audit_event(event, **fields):
+        recorded["write_audit_event"].append({"event": event, **fields})
 
     def fake_subagent(ticket, classification):
         recorded["subagent"].append(
             {"ticket": ticket, "classification": classification}
         )
-        return SubagentResult(status="resolved", reply_draft="handled")
+        return AgentOutcome(status="resolved", reply_draft="handled")
 
     monkeypatch.setattr("ticket_triage.coordinator.escalate", fake_escalate)
-    monkeypatch.setattr("ticket_triage.coordinator.log", fake_log)
+    monkeypatch.setattr("ticket_triage.coordinator.write_audit_event", fake_write_audit_event)
     monkeypatch.setattr(
         "ticket_triage.coordinator.SUBAGENTS",
         {
@@ -58,10 +58,10 @@ def install_classify(monkeypatch):
 def recorded_log(monkeypatch):
     events = []
 
-    def fake_log(event, **fields):
+    def fake_write_audit_event(event, **fields):
         events.append({"event": event, **fields})
 
-    monkeypatch.setattr("ticket_triage.coordinator.log", fake_log)
+    monkeypatch.setattr("ticket_triage.coordinator.write_audit_event", fake_write_audit_event)
     return events
 
 
@@ -79,7 +79,7 @@ def distinct_subagents(monkeypatch):
             call_log[domain].append(
                 {"ticket": ticket, "classification": classification}
             )
-            return SubagentResult(
+            return AgentOutcome(
                 status="resolved", reply_draft=f"{domain} handled"
             )
 
@@ -90,7 +90,7 @@ def distinct_subagents(monkeypatch):
         {domain: make_stub(domain) for domain in call_log},
     )
     monkeypatch.setattr(
-        "ticket_triage.coordinator.log", lambda event, **fields: None
+        "ticket_triage.coordinator.write_audit_event", lambda event, **fields: None
     )
     return call_log
 
@@ -100,9 +100,9 @@ def observability_environment(monkeypatch):
     """Environment for observability contract tests — real escalate (so its log fires), captured log, queue-driven subagent."""
     events: list[dict] = []
     subagent_calls: list[dict] = []
-    subagent_responses: list[SubagentResult] = []
+    subagent_responses: list[AgentOutcome] = []
 
-    def fake_log(event, **fields):
+    def fake_write_audit_event(event, **fields):
         events.append({"event": event, **fields})
 
     def fake_subagent(ticket, classification):
@@ -113,7 +113,7 @@ def observability_environment(monkeypatch):
             )
         return subagent_responses.pop(0)
 
-    monkeypatch.setattr("ticket_triage.coordinator.log", fake_log)
+    monkeypatch.setattr("ticket_triage.coordinator.write_audit_event", fake_write_audit_event)
     monkeypatch.setattr(
         "ticket_triage.coordinator.SUBAGENTS",
         {
@@ -134,7 +134,7 @@ def observability_environment(monkeypatch):
 def retry_environment(monkeypatch):
     """Queue-driven subagent + stubbed escalate — for retry_or_escalate tests."""
     subagent_calls: list[dict] = []
-    subagent_responses: list[SubagentResult] = []
+    subagent_responses: list[AgentOutcome] = []
     escalate_calls: list[dict] = []
 
     def fake_subagent(ticket, classification):
@@ -147,7 +147,7 @@ def retry_environment(monkeypatch):
 
     def fake_escalate(ticket, reason, **context):
         escalate_calls.append({"ticket": ticket, "reason": reason, **context})
-        return Reply(text=None, status="escalated", escalation_reason=reason)
+        return TriageReply(text=None, status="escalated", escalation_reason=reason)
 
     monkeypatch.setattr(
         "ticket_triage.coordinator.SUBAGENTS",
@@ -159,7 +159,7 @@ def retry_environment(monkeypatch):
     )
     monkeypatch.setattr("ticket_triage.coordinator.escalate", fake_escalate)
     monkeypatch.setattr(
-        "ticket_triage.coordinator.log", lambda event, **fields: None
+        "ticket_triage.coordinator.write_audit_event", lambda event, **fields: None
     )
 
     return {

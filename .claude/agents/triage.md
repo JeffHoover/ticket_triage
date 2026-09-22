@@ -18,9 +18,9 @@ Steps:
   4. Outcome     — expected status (resolved / needs_info / escalate) + reply draft
 
 Subagent tools:
-  billing    — look_up_order, issue_refund, submit_response
-  technical  — look_up_order, search_docs, submit_response
-  refund     — look_up_order, issue_refund, submit_response
+  billing    — find_order_by_id, issue_refund, submit_response
+  technical  — find_order_by_id, search_docs, submit_response
+  refund     — find_order_by_id, issue_refund, submit_response
 
 Examples:
   /triage I was charged twice for order ORD-001

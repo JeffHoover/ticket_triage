@@ -1,5 +1,5 @@
 from ticket_triage.coordinator import MAX_RETRIES, retry_or_escalate
-from ticket_triage.schemas import Classification, SubagentResult
+from ticket_triage.schemas import AgentOutcome, Classification
 
 CLASSIFICATION = Classification(
     domain="billing", confidence=0.9, reasoning="test setup"
@@ -8,7 +8,7 @@ CLASSIFICATION = Classification(
 
 def test_successful_first_retry_returns_reply(retry_environment):
     retry_environment["queue"].append(
-        SubagentResult(status="resolved", reply_draft="fixed on retry")
+        AgentOutcome(status="resolved", reply_draft="fixed on retry")
     )
 
     reply = retry_or_escalate("ticket text", CLASSIFICATION, retry_count=1)
@@ -22,8 +22,8 @@ def test_successful_first_retry_returns_reply(retry_environment):
 def test_failure_then_success_returns_reply(retry_environment):
     retry_environment["queue"].extend(
         [
-            SubagentResult(status="failed"),
-            SubagentResult(status="resolved", reply_draft="fixed on second retry"),
+            AgentOutcome(status="failed"),
+            AgentOutcome(status="resolved", reply_draft="fixed on second retry"),
         ]
     )
 
@@ -37,7 +37,7 @@ def test_failure_then_success_returns_reply(retry_environment):
 
 def test_exhausted_retries_escalate_with_repeated_failure(retry_environment):
     for _ in range(MAX_RETRIES):
-        retry_environment["queue"].append(SubagentResult(status="failed"))
+        retry_environment["queue"].append(AgentOutcome(status="failed"))
 
     reply = retry_or_escalate("ticket text", CLASSIFICATION, retry_count=1)
 
@@ -64,10 +64,10 @@ def test_guard_escalates_immediately_when_retry_count_exceeds_max(retry_environm
 
 def test_subagent_escalate_status_forwarded_without_retry(retry_environment):
     retry_environment["queue"].append(
-        SubagentResult(
+        AgentOutcome(
             status="escalate",
             escalation_reason="policy_violation",
-            evidence=[{"tool": "look_up_order", "result": "flagged"}],
+            evidence=[{"tool": "find_order_by_id", "result": "flagged"}],
         )
     )
 
@@ -79,13 +79,13 @@ def test_subagent_escalate_status_forwarded_without_retry(retry_environment):
     escalate_call = retry_environment["escalate_calls"][0]
     assert escalate_call["reason"] == "policy_violation"
     assert escalate_call["evidence"] == [
-        {"tool": "look_up_order", "result": "flagged"}
+        {"tool": "find_order_by_id", "result": "flagged"}
     ]
 
 
 def test_needs_info_returned_without_retry(retry_environment):
     retry_environment["queue"].append(
-        SubagentResult(status="needs_info", reply_draft="please clarify")
+        AgentOutcome(status="needs_info", reply_draft="please clarify")
     )
 
     reply = retry_or_escalate("ticket text", CLASSIFICATION, retry_count=1)

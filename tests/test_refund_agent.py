@@ -1,6 +1,6 @@
 """Tests for the refund-eligibility subagent.
 
-Refund agent has look_up_order + issue_refund (same tools as billing,
+Refund agent has find_order_by_id + issue_refund (same tools as billing,
 different system prompt focused on eligibility determination).
 Same agentic-loop contract as the other subagents.
 """
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ticket_triage.schemas import Classification, SubagentResult
+from ticket_triage.schemas import AgentOutcome, Classification
 from ticket_triage.subagents import (
     MAX_VALIDATION_RETRIES,
     RESPONSE_TOOL_NAME,
@@ -53,11 +53,11 @@ def test_refund_agent_returns_result_when_model_immediately_calls_response_tool(
 
     result = refund_agent("I want a refund on ORD-001", CLASSIFICATION)
 
-    assert isinstance(result, SubagentResult)
+    assert isinstance(result, AgentOutcome)
     assert result.status == "resolved"
 
 
-def test_refund_agent_executes_look_up_order_and_issue_refund_then_responds(
+def test_refund_agent_executes_find_order_by_id_and_issue_refund_then_responds(
     monkeypatch,
 ):
     fake_client = MagicMock()
@@ -65,7 +65,7 @@ def test_refund_agent_executes_look_up_order_and_issue_refund_then_responds(
         _message_response(
             content_blocks=[
                 _tool_use_block(
-                    name="look_up_order",
+                    name="find_order_by_id",
                     tool_input={"order_id": "ORD-001"},
                     block_id="tool-1",
                 )
@@ -179,7 +179,7 @@ def test_refund_agent_raises_when_model_returns_no_tool_use(monkeypatch):
         refund_agent("ticket", CLASSIFICATION)
 
 
-def test_refund_agent_has_both_look_up_order_and_issue_refund_tools(monkeypatch):
+def test_refund_agent_has_both_find_order_by_id_and_issue_refund_tools(monkeypatch):
     fake_client = MagicMock()
     fake_client.messages.create.return_value = _message_response(
         content_blocks=[
@@ -196,5 +196,5 @@ def test_refund_agent_has_both_look_up_order_and_issue_refund_tools(monkeypatch)
 
     kwargs = fake_client.messages.create.call_args.kwargs
     tool_names = {t["name"] for t in kwargs["tools"]}
-    assert "look_up_order" in tool_names
+    assert "find_order_by_id" in tool_names
     assert "issue_refund" in tool_names

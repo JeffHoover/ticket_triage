@@ -2,7 +2,7 @@
 
 Same agentic-loop contract as billing_agent: resolve via submit_response,
 dispatch domain tools, retry on invalid output, exhaust retries → failed.
-Technical agent only has look_up_order (read-only); issue_refund is out of scope.
+Technical agent only has find_order_by_id (read-only); issue_refund is out of scope.
 """
 
 from types import SimpleNamespace
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ticket_triage.schemas import Classification, SubagentResult
+from ticket_triage.schemas import AgentOutcome, Classification
 from ticket_triage.subagents import (
     MAX_VALIDATION_RETRIES,
     RESPONSE_TOOL_NAME,
@@ -55,18 +55,18 @@ def test_technical_agent_returns_result_when_model_immediately_calls_response_to
 
     result = technical_agent("My app keeps crashing", CLASSIFICATION)
 
-    assert isinstance(result, SubagentResult)
+    assert isinstance(result, AgentOutcome)
     assert result.status == "resolved"
     assert result.reply_draft == "Your connection issue has been resolved."
 
 
-def test_technical_agent_executes_look_up_order_then_returns_response(monkeypatch):
+def test_technical_agent_executes_find_order_by_id_then_returns_response(monkeypatch):
     fake_client = MagicMock()
     fake_client.messages.create.side_effect = [
         _message_response(
             content_blocks=[
                 _tool_use_block(
-                    name="look_up_order",
+                    name="find_order_by_id",
                     tool_input={"order_id": "ORD-001"},
                     block_id="tool-1",
                 )
@@ -189,7 +189,7 @@ def test_technical_agent_does_not_have_issue_refund_tool(monkeypatch):
     kwargs = fake_client.messages.create.call_args.kwargs
     tool_names = {t["name"] for t in kwargs["tools"]}
     assert "issue_refund" not in tool_names
-    assert "look_up_order" in tool_names
+    assert "find_order_by_id" in tool_names
 
 
 def _resolved_response():

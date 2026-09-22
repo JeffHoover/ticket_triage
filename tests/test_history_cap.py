@@ -19,11 +19,11 @@ def _message_response(content_blocks: list, stop_reason: str = "tool_use"):
     return SimpleNamespace(content=content_blocks, stop_reason=stop_reason)
 
 
-def _look_up_order_response(block_id: str):
+def _find_order_by_id_response(block_id: str):
     return _message_response(
         content_blocks=[
             _tool_use_block(
-                name="look_up_order",
+                name="find_order_by_id",
                 tool_input={"order_id": "ORD-001"},
                 block_id=block_id,
             )
@@ -42,11 +42,11 @@ def _submit_response():
     )
 
 
-def test_run_agent_caps_message_history_by_dropping_oldest_tool_result_pairs(
+def test_run_agent_loop_caps_message_history_by_dropping_oldest_tool_result_pairs(
     monkeypatch,
 ):
     """
-    _run_agent must drop oldest assistant+tool-result pairs — not arbitrary
+    run_agent_loop must drop oldest assistant+tool-result pairs — not arbitrary
     turns — once messages exceeds MAX_HISTORY_MESSAGES, so that:
       1. messages[0] (the original ticket) is always preserved.
       2. client.messages.create is never called with more than
@@ -65,7 +65,7 @@ def test_run_agent_caps_message_history_by_dropping_oldest_tool_result_pairs(
 
     fake_client = MagicMock()
     fake_client.messages.create.side_effect = [
-        _look_up_order_response(block_id=f"tool-{i}") for i in range(num_tool_rounds)
+        _find_order_by_id_response(block_id=f"tool-{i}") for i in range(num_tool_rounds)
     ] + [_submit_response()]
     monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
 

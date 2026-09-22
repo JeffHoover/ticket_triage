@@ -16,7 +16,7 @@ See [README.md](README.md) for setup, test, and run commands.
 Coordinator agent receives a raw ticket, classifies it, and dispatches to one of 2–3 subagents (billing, technical, refund-eligibility). Coordinator/subagent pattern — **not** a single monolithic prompt.
 
 ### 2. MCP tool design
-Each subagent gets real tools via MCP — a mock `look_up_order`, a mock `issue_refund`. Focus on schema design: strict input/output types, clear tool descriptions, and explicit behavior when a tool call fails or returns malformed data.
+Each subagent gets real tools via MCP — a mock `find_order_by_id`, a mock `issue_refund`. Focus on schema design: strict input/output types, clear tool descriptions, and explicit behavior when a tool call fails or returns malformed data.
 
 ### 3. Structured output + validation
 Force every agent response into JSON matching a schema. Retry loop when validation fails instead of trusting the model.
@@ -50,15 +50,15 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 - Tools swap easily: implementation changes (mock → Postgres → REST API) without touching subagent code.
 
 **Current tools** (in `ticket_triage/tools.py`):
-- `look_up_order(order_id)` — read-only. Returns `LookUpOrderSuccess | LookUpOrderFailure`. Failure code: `order_not_found`.
+- `find_order_by_id(order_id)` — read-only. Returns `FindOrderByIdSuccess | FindOrderByIdFailure`. Failure code: `order_not_found`.
 - `issue_refund(order_id, amount, reason)` — state-changing. Returns `IssueRefundSuccess | IssueRefundFailure`. Failure codes: `order_not_found`, `already_refunded`, `refund_exceeds_order_total`.
 
 ## Committed conventions (load-bearing — changing means rewriting tests)
 
 - **Retry state parameter is `retry_count`, starting at 1.** Not `attempt` (off-by-one ambiguity).
 - **`MAX_RETRIES = 2`** — 2 retries after the coordinator's initial failed call = 3 total attempts. Guard clause escalates *without* calling the subagent when `retry_count > MAX_RETRIES`.
-- **Escalation is coordinator-owned, not subagent-owned.** Subagents *request* escalation via `SubagentResult(status="escalate", escalation_reason=...)`; the coordinator (or `retry_or_escalate`) executes `escalate()`. Single audit point, single place to enforce top-level policy.
-- **`Reply.text` on escalation is non-None** (customer-facing placeholder). Escalation isn't invisible to the customer.
+- **Escalation is coordinator-owned, not subagent-owned.** Subagents *request* escalation via `AgentOutcome(status="escalate", escalation_reason=...)`; the coordinator (or `retry_or_escalate`) executes `escalate()`. Single audit point, single place to enforce top-level policy.
+- **`TriageReply.text` on escalation is non-None** (customer-facing placeholder). Escalation isn't invisible to the customer.
 - **Log events are structured JSON lines** with `event`, ISO-8601 UTC `timestamp`, and arbitrary fields. Pydantic models serialize via `.model_dump()`; unknown types raise `TypeError` (fail-loud, no silent `str()` fallback).
 - **Log path via `TICKET_TRIAGE_LOG_PATH` env var**, default `./ticket_triage.log.jsonl`.
 - **Test isolation via `monkeypatch`** — the coordinator's `classify`, `escalate`, `log`, and `SUBAGENTS` are all module-level and patched per-test. Fixtures in `tests/conftest.py`.
@@ -81,9 +81,9 @@ Routes a support ticket through the triage pipeline and explains each decision s
 
 | Subagent | Tools |
 |---|---|
-| billing | `look_up_order`, `issue_refund`, `submit_response` |
-| technical | `look_up_order`, `search_docs`, `submit_response` |
-| refund | `look_up_order`, `issue_refund`, `submit_response` |
+| billing | `find_order_by_id`, `issue_refund`, `submit_response` |
+| technical | `find_order_by_id`, `search_docs`, `submit_response` |
+| refund | `find_order_by_id`, `issue_refund`, `submit_response` |
 
 **Examples:**
 ```
@@ -102,7 +102,7 @@ All pillars complete. Next: exam prep review.
 | # | Pillar | Status | Notes |
 |---|---|---|---|
 | 1 | Coordinator/subagent orchestration | Done | All three subagents (billing, technical, refund) implemented + tested. Coordinator dispatches to all three. E2E tests cover each domain. |
-| 2 | MCP tool design | Done | Two tools with strict Pydantic schemas and tagged-union responses (`ok`/`error` discriminator): `look_up_order` (read-only) and `issue_refund` (state-changing). Backed by in-memory data instead of real services; production would swap the backing store without touching tool schemas or subagent code. MCP server wraps both. Stateless wrapper pattern via injectable `_refunded_orders`. |
+| 2 | MCP tool design | Done | Two tools with strict Pydantic schemas and tagged-union responses (`ok`/`error` discriminator): `find_order_by_id` (read-only) and `issue_refund` (state-changing). Backed by in-memory data instead of real services; production would swap the backing store without touching tool schemas or subagent code. MCP server wraps both. Stateless wrapper pattern via injectable `refunded_order_ids`. |
 | 3 | Structured output + validation | Done | `submit_response` tool pattern forces structured JSON output — the model cannot return free text, only a valid tool call. Validation-retry loop (up to `MAX_VALIDATION_RETRIES`) on schema failure; exhausted retries yield `status="failed"` rather than a crash. |
 | 4 | Escalation gates | Done | Low-confidence classification and subagent `status="escalate"` both route to `escalate()` in the coordinator — single audit point for all escalation policy. `retry_or_escalate` enforces `MAX_RETRIES = 2` (3 total attempts); guard clause escalates without calling the subagent when the limit is exceeded. |
 | 5 | Context management + prompt caching | Done | Prompt caching on system prompt + tool defs (`cache_control: ephemeral`) in all subagents. Conversation history cap: drops oldest assistant+tool-result pairs when `messages` exceeds `MAX_HISTORY_MESSAGES = 10`, preserving `messages[0]` and role alternation. |
@@ -112,4 +112,4 @@ All pillars complete. Next: exam prep review.
 
 | 9 | Model routing | Done | `CLASSIFIER_MODEL` (Haiku) for `classify` in `coordinator.py`; `SUBAGENT_MODEL` (Sonnet) for all three subagents in `subagents.py`. Routing is static by step, not by domain — classification is low-stakes/high-volume so Haiku is appropriate; tool-use chains need Sonnet's stronger reasoning. |
 
-83 tests across gates, dispatch, escalate, retry, observability, log, look_up_order, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, docs chunking, RAG retrieval, search_docs wiring, e2e dispatch, and model routing. 98% line coverage, 74% mutation kill rate (see README for how to run).
+83 tests across gates, dispatch, escalate, retry, observability, write_audit_event, find_order_by_id, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, docs chunking, RAG retrieval, search_docs wiring, e2e dispatch, and model routing. 98% line coverage, 74% mutation kill rate (see README for how to run).

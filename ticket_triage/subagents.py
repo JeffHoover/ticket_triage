@@ -1,16 +1,16 @@
 from anthropic import Anthropic
 from pydantic import ValidationError
 
-from ticket_triage.schemas import Classification, SubagentResult
+from ticket_triage.schemas import AgentOutcome, Classification
 from ticket_triage.rag import search_docs as _search_docs
 from ticket_triage.tools import (
+    FindOrderByIdInput,
     IssueRefundInput,
-    LookUpOrderInput,
     SearchDocsChunk,
     SearchDocsInput,
     SearchDocsResult,
+    find_order_by_id,
     issue_refund,
-    look_up_order,
 )
 
 RESPONSE_TOOL_NAME = "submit_response"
@@ -36,10 +36,10 @@ TECHNICAL_SYSTEM_PROMPT = (
 
 _client: Anthropic | None = None
 
-_LOOK_UP_ORDER_DEF = {
-    "name": "look_up_order",
-    "description": "Look up a customer's order by order_id.",
-    "input_schema": LookUpOrderInput.model_json_schema(),
+_FIND_ORDER_BY_ID_DEF = {
+    "name": "find_order_by_id",
+    "description": "Find an order by its ID. Returns order details or a structured not-found error.",
+    "input_schema": FindOrderByIdInput.model_json_schema(),
 }
 
 _ISSUE_REFUND_DEF = {
@@ -54,13 +54,13 @@ _RESPONSE_TOOL_DEF = {
         "Submit your final structured response. Call this exactly "
         "once when you're done handling the ticket."
     ),
-    "input_schema": SubagentResult.model_json_schema(),
+    "input_schema": AgentOutcome.model_json_schema(),
     "cache_control": {"type": "ephemeral"},
 }
 
-_BILLING_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _ISSUE_REFUND_DEF, _RESPONSE_TOOL_DEF]
+_BILLING_TOOL_DEFS = [_FIND_ORDER_BY_ID_DEF, _ISSUE_REFUND_DEF, _RESPONSE_TOOL_DEF]
 _BILLING_TOOL_REGISTRY = {
-    "look_up_order": (LookUpOrderInput, look_up_order),
+    "find_order_by_id": (FindOrderByIdInput, find_order_by_id),
     "issue_refund": (IssueRefundInput, issue_refund),
 }
 
@@ -73,9 +73,9 @@ _SEARCH_DOCS_DEF = {
     "input_schema": SearchDocsInput.model_json_schema(),
 }
 
-_TECHNICAL_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _SEARCH_DOCS_DEF, _RESPONSE_TOOL_DEF]
+_TECHNICAL_TOOL_DEFS = [_FIND_ORDER_BY_ID_DEF, _SEARCH_DOCS_DEF, _RESPONSE_TOOL_DEF]
 _TECHNICAL_TOOL_REGISTRY = {
-    "look_up_order": (LookUpOrderInput, look_up_order),
+    "find_order_by_id": (FindOrderByIdInput, find_order_by_id),
     "search_docs": (
         SearchDocsInput,
         lambda req: SearchDocsResult(
@@ -95,13 +95,13 @@ def _cached_system(text: str) -> list[dict]:
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
-def _run_agent(
+def run_agent_loop(
     ticket: str,
     classification: Classification,
     system_prompt: str,
     tool_defs: list[dict],
     tool_registry: dict,
-) -> SubagentResult:
+) -> AgentOutcome:
     client = _get_client()
     messages = [
         {
@@ -131,11 +131,11 @@ def _run_agent(
 
         if response_tool_call is not None:
             try:
-                return SubagentResult(**response_tool_call.input)
+                return AgentOutcome(**response_tool_call.input)
             except ValidationError as validation_error:
                 validation_retries += 1
                 if validation_retries > MAX_VALIDATION_RETRIES:
-                    return SubagentResult(status="failed")
+                    return AgentOutcome(status="failed")
                 messages.append({"role": "assistant", "content": response.content})
                 messages.append(
                     {
@@ -181,15 +181,15 @@ def _run_agent(
             del messages[1:3] # Remove the oldest assistant+tool-result pair, preserving messages[0] (the original ticket) and role alternation.
 
 
-def billing_agent(ticket: str, classification: Classification) -> SubagentResult:
-    return _run_agent(
+def billing_agent(ticket: str, classification: Classification) -> AgentOutcome:
+    return run_agent_loop(
         ticket, classification,
         BILLING_SYSTEM_PROMPT, _BILLING_TOOL_DEFS, _BILLING_TOOL_REGISTRY,
     )
 
 
-def technical_agent(ticket: str, classification: Classification) -> SubagentResult:
-    return _run_agent(
+def technical_agent(ticket: str, classification: Classification) -> AgentOutcome:
+    return run_agent_loop(
         ticket, classification,
         TECHNICAL_SYSTEM_PROMPT, _TECHNICAL_TOOL_DEFS, _TECHNICAL_TOOL_REGISTRY,
     )
@@ -201,15 +201,15 @@ REFUND_SYSTEM_PROMPT = (
     f"done, call the {RESPONSE_TOOL_NAME} tool with your final structured response."
 )
 
-_REFUND_TOOL_DEFS = [_LOOK_UP_ORDER_DEF, _ISSUE_REFUND_DEF, _RESPONSE_TOOL_DEF]
+_REFUND_TOOL_DEFS = [_FIND_ORDER_BY_ID_DEF, _ISSUE_REFUND_DEF, _RESPONSE_TOOL_DEF]
 _REFUND_TOOL_REGISTRY = {
-    "look_up_order": (LookUpOrderInput, look_up_order),
+    "find_order_by_id": (FindOrderByIdInput, find_order_by_id),
     "issue_refund": (IssueRefundInput, issue_refund),
 }
 
 
-def refund_agent(ticket: str, classification: Classification) -> SubagentResult:
-    return _run_agent(
+def refund_agent(ticket: str, classification: Classification) -> AgentOutcome:
+    return run_agent_loop(
         ticket, classification,
         REFUND_SYSTEM_PROMPT, _REFUND_TOOL_DEFS, _REFUND_TOOL_REGISTRY,
     )

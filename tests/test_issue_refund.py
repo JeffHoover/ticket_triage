@@ -11,11 +11,11 @@ from ticket_triage.tools import (
 
 @pytest.fixture(autouse=True)
 def reset_refund_state():
-    from ticket_triage.tools import _REFUNDED_ORDERS
+    from ticket_triage.tools import _REFUNDED_ORDER_IDS
 
-    _REFUNDED_ORDERS.clear()
+    _REFUNDED_ORDER_IDS.clear()
     yield
-    _REFUNDED_ORDERS.clear()
+    _REFUNDED_ORDER_IDS.clear()
 
 
 def test_issue_refund_returns_typed_success_for_valid_request():

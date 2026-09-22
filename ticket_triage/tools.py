@@ -15,16 +15,16 @@ class ToolError(BaseModel):
     message: str
 
 
-class LookUpOrderInput(BaseModel):
+class FindOrderByIdInput(BaseModel):
     order_id: str = Field(min_length=1)
 
 
-class LookUpOrderSuccess(BaseModel):
+class FindOrderByIdSuccess(BaseModel):
     status: Literal["ok"] = "ok"
     order: Order
 
 
-class LookUpOrderFailure(BaseModel):
+class FindOrderByIdFailure(BaseModel):
     status: Literal["error"] = "error"
     error: ToolError
 
@@ -39,18 +39,18 @@ _ORDERS: dict[str, Order] = {
 }
 
 
-def look_up_order(
-    request: LookUpOrderInput,
-) -> LookUpOrderSuccess | LookUpOrderFailure:
+def find_order_by_id(
+    request: FindOrderByIdInput,
+) -> FindOrderByIdSuccess | FindOrderByIdFailure:
     order = _ORDERS.get(request.order_id)
     if order is None:
-        return LookUpOrderFailure(
+        return FindOrderByIdFailure(
             error=ToolError(
                 code="order_not_found",
                 message=f"Order '{request.order_id}' not found",
             )
         )
-    return LookUpOrderSuccess(order=order)
+    return FindOrderByIdSuccess(order=order)
 
 
 class SearchDocsInput(BaseModel):
@@ -88,15 +88,15 @@ class IssueRefundFailure(BaseModel):
     error: ToolError
 
 
-_REFUNDED_ORDERS: set[str] = set()
+_REFUNDED_ORDER_IDS: set[str] = set()
 
 
 def issue_refund(
     request: IssueRefundInput,
     *,
-    _refunded_orders: set[str] | None = None,
+    refunded_order_ids: set[str] | None = None,
 ) -> IssueRefundSuccess | IssueRefundFailure:
-    refunded = _refunded_orders if _refunded_orders is not None else _REFUNDED_ORDERS
+    refunded_order_ids = refunded_order_ids if refunded_order_ids is not None else _REFUNDED_ORDER_IDS
     order = _ORDERS.get(request.order_id)
     if order is None:
         return IssueRefundFailure(
@@ -105,7 +105,7 @@ def issue_refund(
                 message=f"Order '{request.order_id}' not found",
             )
         )
-    if request.order_id in refunded:
+    if request.order_id in refunded_order_ids:
         return IssueRefundFailure(
             error=ToolError(
                 code="already_refunded",
@@ -122,7 +122,7 @@ def issue_refund(
                 ),
             )
         )
-    refunded.add(request.order_id)
+    refunded_order_ids.add(request.order_id)
     return IssueRefundSuccess(
         refund=Refund(
             refund_id=f"REF-{request.order_id}",

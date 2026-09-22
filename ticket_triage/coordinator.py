@@ -6,7 +6,7 @@ from typing import Callable
 from anthropic import Anthropic
 from pydantic import BaseModel
 
-from ticket_triage.schemas import Classification, Reply, SubagentResult
+from ticket_triage.schemas import AgentOutcome, Classification, TriageReply
 from ticket_triage.subagents import CLASSIFIER_MODEL, billing_agent, refund_agent, technical_agent
 
 _client: Anthropic | None = None
@@ -19,7 +19,7 @@ def _get_client() -> Anthropic:
     return _client
 
 
-def _json_default(obj):
+def _serialize_log_value(obj):
     if isinstance(obj, BaseModel):
         return obj.model_dump()
     raise TypeError(
@@ -29,7 +29,7 @@ def _json_default(obj):
 CONFIDENCE_THRESHOLD = 0.7
 MAX_RETRIES = 2
 
-SUBAGENTS: dict[str, Callable[..., SubagentResult]] = {
+SUBAGENTS: dict[str, Callable[..., AgentOutcome]] = {
     "billing": billing_agent,
     "technical": technical_agent,
     "refund": refund_agent,
@@ -57,14 +57,14 @@ def classify(ticket: str) -> Classification:
     return Classification.model_validate_json(text)
 
 
-def escalate(ticket: str, reason: str, **context) -> Reply:
-    log("escalated", ticket=ticket, reason=reason, **context)
-    return Reply(text="Your ticket has been escalated.", status="escalated", escalation_reason=reason)
+def escalate(ticket: str, reason: str, **context) -> TriageReply:
+    write_audit_event("escalated", ticket=ticket, reason=reason, **context)
+    return TriageReply(text="Your ticket has been escalated.", status="escalated", escalation_reason=reason)
 
 
 def retry_or_escalate(
     ticket: str, classification: Classification, retry_count: int
-) -> Reply:
+) -> TriageReply:
     if retry_count > MAX_RETRIES:
         return escalate(
             ticket,
@@ -73,25 +73,25 @@ def retry_or_escalate(
             attempts=retry_count,
         )
 
-    log(
+    write_audit_event(
         "retry_attempted",
         retry_count=retry_count,
         ticket=ticket,
         domain=classification.domain,
     )
-    result = SUBAGENTS[classification.domain](ticket, classification)
-    log("returned", domain=classification.domain, **result.model_dump())
-    if result.status == "failed":
+    agent_outcome = SUBAGENTS[classification.domain](ticket, classification)
+    write_audit_event("returned", domain=classification.domain, **agent_outcome.model_dump())
+    if agent_outcome.status == "failed":
         return retry_or_escalate(
             ticket, classification, retry_count=retry_count + 1
         )
-    if result.status == "escalate":
+    if agent_outcome.status == "escalate":
         return escalate(
-            ticket, reason=result.escalation_reason, evidence=result.evidence
+            ticket, reason=agent_outcome.escalation_reason, evidence=agent_outcome.evidence
         )
-    return Reply(text=result.reply_draft, status=result.status)
+    return TriageReply(text=agent_outcome.reply_draft, status=agent_outcome.status)
 
-def log(event: str, **fields) -> None:
+def write_audit_event(event: str, **fields) -> None:
     path = os.environ.get("TICKET_TRIAGE_LOG_PATH", "ticket_triage.log.jsonl")
     entry = {
         "event": event,
@@ -99,14 +99,14 @@ def log(event: str, **fields) -> None:
         **fields,
     }
     with open(path, "a") as output_file:
-        output_file.write(json.dumps(entry, default=_json_default) + "\n")
+        output_file.write(json.dumps(entry, default=_serialize_log_value) + "\n")
 
 
-def coordinator(ticket: str) -> Reply:
-    log("received", ticket=ticket)
+def coordinator(ticket: str) -> TriageReply:
+    write_audit_event("received", ticket=ticket)
 
     classification = classify(ticket)
-    log("classified", **classification.model_dump())
+    write_audit_event("classified", **classification.model_dump())
 
     if (
         classification.domain == "unknown"
@@ -114,17 +114,17 @@ def coordinator(ticket: str) -> Reply:
     ):
         return escalate(ticket, reason="low_confidence", classification=classification)
 
-    result = SUBAGENTS[classification.domain](ticket, classification)
-    log("returned", domain=classification.domain, **result.model_dump())
+    agent_outcome = SUBAGENTS[classification.domain](ticket, classification)
+    write_audit_event("returned", domain=classification.domain, **agent_outcome.model_dump())
 
-    if result.status == "escalate":
+    if agent_outcome.status == "escalate":
         return escalate(
-            ticket, reason=result.escalation_reason, evidence=result.evidence
+            ticket, reason=agent_outcome.escalation_reason, evidence=agent_outcome.evidence
         )
-    if result.status == "failed":
+    if agent_outcome.status == "failed":
         return retry_or_escalate(ticket, classification, retry_count=1)
 
-    return Reply(
-        text=result.reply_draft,
-        status="resolved" if result.status == "resolved" else "needs_info",
+    return TriageReply(
+        text=agent_outcome.reply_draft,
+        status="resolved" if agent_outcome.status == "resolved" else "needs_info",
     )

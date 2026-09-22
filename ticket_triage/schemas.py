@@ -9,14 +9,14 @@ class Classification(BaseModel):
     reasoning: str
 
 
-class SubagentResult(BaseModel):
+class AgentOutcome(BaseModel):
     status: Literal["resolved", "needs_info", "escalate", "failed"]
     reply_draft: str | None = None
     evidence: list[dict] = Field(default_factory=list)
     escalation_reason: str | None = None
 
 
-class Reply(BaseModel):
+class TriageReply(BaseModel):
     text: str | None
     status: Literal["resolved", "needs_info", "escalated"]
     escalation_reason: str | None = None

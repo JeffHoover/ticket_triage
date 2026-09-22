@@ -7,39 +7,39 @@ import asyncio
 import pytest
 
 from ticket_triage.mcp_server import (
+    find_order_by_id as mcp_find_order_by_id,
     issue_refund as mcp_issue_refund,
-    look_up_order as mcp_look_up_order,
     mcp,
 )
 from ticket_triage.tools import (
+    FindOrderByIdInput,
     IssueRefundInput,
-    LookUpOrderInput,
+    find_order_by_id,
     issue_refund,
-    look_up_order,
 )
 
 
 @pytest.fixture(autouse=True)
 def reset_refund_state():
-    from ticket_triage.tools import _REFUNDED_ORDERS
+    from ticket_triage.tools import _REFUNDED_ORDER_IDS
 
-    _REFUNDED_ORDERS.clear()
+    _REFUNDED_ORDER_IDS.clear()
     yield
-    _REFUNDED_ORDERS.clear()
+    _REFUNDED_ORDER_IDS.clear()
 
 
-def test_mcp_server_registers_look_up_order_and_issue_refund():
+def test_mcp_server_registers_find_order_by_id_and_issue_refund():
     tools = asyncio.run(mcp.list_tools())
     tool_names = {tool.name for tool in tools}
 
-    assert "look_up_order" in tool_names
+    assert "find_order_by_id" in tool_names
     assert "issue_refund" in tool_names
 
 
-def test_mcp_look_up_order_wrapper_matches_direct_call():
-    wrapper_result = mcp_look_up_order(order_id="ORD-001")
-    direct_result = look_up_order(
-        LookUpOrderInput(order_id="ORD-001")
+def test_mcp_find_order_by_id_wrapper_matches_direct_call():
+    wrapper_result = mcp_find_order_by_id(order_id="ORD-001")
+    direct_result = find_order_by_id(
+        FindOrderByIdInput(order_id="ORD-001")
     ).model_dump()
 
     assert wrapper_result == direct_result

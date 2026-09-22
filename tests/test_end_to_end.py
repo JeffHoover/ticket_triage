@@ -1,5 +1,5 @@
 """Integration tests — exercise the coordinator + subagent + tool loop together
-with only the external boundaries (classify, log, Anthropic client) mocked."""
+with only the external boundaries (classify, write_audit_event, Anthropic client) mocked."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
