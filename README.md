@@ -9,10 +9,10 @@ Requires Python 3.14 (Homebrew).
 ```
 python3 -m venv .venv
 source .venv/bin/activate
-pip install pytest pydantic anthropic
+pip install pytest pydantic anthropic chromadb mcp
 ```
 
-The `anthropic` SDK is required for the subagents. Set `ANTHROPIC_API_KEY` in your environment for real API calls; unit tests mock the client, so tests run without a key.
+The `anthropic` SDK is required for real API calls. Set `ANTHROPIC_API_KEY` in your environment; unit tests mock the client, so tests run without a key.
 
 Optional dev tools (coverage and mutation testing):
 
@@ -39,21 +39,42 @@ Current: 98% line coverage, 74% mutation kill rate (284/384). `rag.py` is exclud
 
 ## Run
 
-No entry point yet — the coordinator is invoked programmatically, and `classify()` plus each subagent are still stubs. Structured logs go to `./ticket_triage.log.jsonl` as JSON lines; override with `TICKET_TRIAGE_LOG_PATH=/path/to/log.jsonl`.
+Invoke the coordinator programmatically:
+
+```python
+from ticket_triage.coordinator import coordinator
+reply = coordinator("I was charged twice for order ORD-001")
+```
+
+Structured logs go to `./ticket_triage.log.jsonl` as JSON lines; override with `TICKET_TRIAGE_LOG_PATH=/path/to/log.jsonl`.
+
+The MCP server exposes `find_order_by_id` and `issue_refund` over stdio:
+
+```
+python -m ticket_triage.mcp_server
+```
+
+The `/triage` slash command (`.claude/agents/triage.md`) walks through the full pipeline interactively inside Claude Code.
 
 ## Layout
 
 ```
-ticket_triage/          # importable package
-  coordinator.py        # orchestration, gates, retry/escalate, log
-  schemas.py            # Pydantic models: Classification, SubagentResult, Reply
-  tools.py              # mock external system calls (look_up_order, issue_refund)
+ticket_triage/
+  coordinator.py    # classify, dispatch, retry/escalate, write_audit_event
+  subagents.py      # billing_agent, technical_agent, refund_agent; run_agent_loop
+  schemas.py        # Classification, AgentOutcome, TriageReply
+  tools.py          # find_order_by_id, issue_refund (mock, Pydantic-typed)
+  mcp_server.py     # MCP wrapper exposing tools over stdio
+  rag.py            # ChromaDB in-memory collection + search_docs
+  docs.py           # product-docs corpus, paragraph-level chunking
+hooks/
+  refund_threshold.py   # PreToolUse hook: blocks refunds above $100 threshold
 tests/                  # pytest suite; shared fixtures in tests/conftest.py
-conftest.py             # sentinel — puts project root on sys.path for tests
+.claude/
+  agents/triage.md      # /triage slash command
+  settings.json         # hook wiring
 ```
-
-Planned: `ticket_triage/subagents.py` (billing/technical/refund).
 
 ## Status
 
-All 8 pillars complete. 81 tests, 98% line coverage, 74% mutation kill rate (284/384, `rag.py` excluded). See [CLAUDE.md](CLAUDE.md) for design reasoning and the pillar-by-pillar status table.
+All 9 pillars complete. 84 tests, 98% line coverage, 74% mutation kill rate (284/384, `rag.py` excluded). See [CLAUDE.md](CLAUDE.md) for design reasoning and the pillar-by-pillar status table.
