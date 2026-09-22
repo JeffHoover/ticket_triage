@@ -45,12 +45,19 @@ def test_mcp_find_order_by_id_wrapper_matches_direct_call():
     assert wrapper_result == direct_result
 
 
-def test_mcp_issue_refund_wrapper_matches_direct_call():
-    wrapper_result = mcp_issue_refund(
-        order_id="ORD-001", amount=50.00, reason="damaged"
-    )
-    direct_result = issue_refund(
-        IssueRefundInput(order_id="ORD-001", amount=50.00, reason="damaged")
-    ).model_dump()
+def test_mcp_issue_refund_wrapper_returns_success_shape():
+    result = mcp_issue_refund(order_id="ORD-001", amount=50.00, reason="damaged")
 
-    assert wrapper_result == direct_result
+    assert result["status"] == "ok"
+    assert result["refund"]["order_id"] == "ORD-001"
+    assert result["refund"]["amount_refunded"] == 50.00
+    assert result["refund"]["refund_id"]  # non-empty
+
+
+def test_mcp_issue_refund_blocks_duplicate_refund_for_same_order():
+    first = mcp_issue_refund(order_id="ORD-001", amount=50.00, reason="damaged")
+    second = mcp_issue_refund(order_id="ORD-001", amount=50.00, reason="damaged")
+
+    assert first["status"] == "ok"
+    assert second["status"] == "error"
+    assert second["error"]["code"] == "already_refunded"

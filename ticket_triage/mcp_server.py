@@ -22,7 +22,6 @@ def issue_refund(order_id: str, amount: float, reason: str) -> dict:
     """Issue a refund for an order. Returns refund details on success or a structured error."""
     tool_result = _issue_refund(
         IssueRefundInput(order_id=order_id, amount=amount, reason=reason),
-        refunded_order_ids=set(),
     )
     return tool_result.model_dump()
 
