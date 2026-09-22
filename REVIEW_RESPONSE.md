@@ -1,6 +1,6 @@
 # Review Response
 
-Naming suggestions applied and committed. Responses to all other findings below.
+Naming suggestions applied and committed. README updated. Responses to all other findings below.
 
 ---
 
@@ -10,7 +10,7 @@ Naming suggestions applied and committed. Responses to all other findings below.
 
 **Agree — this is a bug against documented intent.**
 
-`mcp_server.py` passes a fresh `set()` to every `issue_refund` call, bypassing the `_REFUNDED_ORDER_IDS` guard that CLAUDE.md documents as intentional. The MCP wrapper should share the module-level set, not create a throwaway one. Fix is one-line; will address.
+`mcp_server.py` passes a fresh `set()` to every `issue_refund` call, bypassing the `_REFUNDED_ORDER_IDS` guard that CLAUDE.md documents as intentional. The MCP wrapper should share the module-level set, not create a throwaway one. ~~Fix is one-line; will address.~~ Fixed: removed `refunded_order_ids=set()` from the MCP wrapper so it falls through to the module-level set. Test added.
 
 ### 2. High — final response can bypass tool execution
 
@@ -70,7 +70,7 @@ CLAUDE.md says every tool call is logged; the tool dispatch loop logs neither in
 
 **Agree.**
 
-`README.md` omits `chromadb` and `mcp` from dependencies and describes subagents as stubs. `pyproject.toml` has no metadata or dependency list. Will update README and pyproject.toml.
+~~`README.md` omits `chromadb` and `mcp` from dependencies and describes subagents as stubs. `pyproject.toml` has no metadata or dependency list. Will update README and pyproject.toml.~~ README updated: dependencies, layout, run instructions, and status now reflect current state. `pyproject.toml` metadata and dependency list still absent; deferred.
 
 ---
 
@@ -78,7 +78,7 @@ CLAUDE.md says every tool call is logged; the tool dispatch loop logs neither in
 
 | Finding | Response |
 |---|---|
-| Stop creating new refund-state set in MCP wrapper | Will fix (see finding 1). |
+| ~~Stop creating new refund-state set in MCP wrapper~~ | ~~Will fix (see finding 1).~~ Fixed. |
 | Replace `AgentOutcome`'s optional-field bag with a discriminated outcome union | Will fix (see finding 4). |
 | Make threshold validation fail closed and enforce in `issue_refund`, not only in hook | Fail-closed bug in hook: will fix. Enforcement inside `issue_refund`: deferred — keeping the hook-only demo intentional per pillar 6; noting production expectation. |
 | Extract an `AgentLoop` responsible for tool dispatch, input validation, result pairing, logging, history trimming, and final-response acceptance | Will do. This is the right center-of-mass refactor and directly addresses findings 5, 6, 7, and 8 simultaneously. |
