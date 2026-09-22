@@ -1,11 +1,8 @@
-import json
-import os
-from datetime import datetime, timezone
 from typing import Callable
 
 from anthropic import Anthropic
-from pydantic import BaseModel
 
+from ticket_triage.observability import write_audit_event
 from ticket_triage.schemas import AgentOutcome, Classification, TriageReply
 from ticket_triage.subagents import CLASSIFIER_MODEL, billing_agent, refund_agent, technical_agent
 
@@ -17,14 +14,6 @@ def _get_client() -> Anthropic:
     if _client is None:
         _client = Anthropic()
     return _client
-
-
-def _serialize_log_value(obj):
-    if isinstance(obj, BaseModel):
-        return obj.model_dump()
-    raise TypeError(
-        f"Object of type {type(obj).__name__} is not JSON serializable"
-    )
 
 CONFIDENCE_THRESHOLD = 0.7
 MAX_RETRIES = 2
@@ -90,17 +79,6 @@ def retry_or_escalate(
             ticket, reason=agent_outcome.escalation_reason, evidence=agent_outcome.evidence
         )
     return TriageReply(text=agent_outcome.reply_draft, status=agent_outcome.status)
-
-def write_audit_event(event: str, **fields) -> None:
-    path = os.environ.get("TICKET_TRIAGE_LOG_PATH", "ticket_triage.log.jsonl")
-    entry = {
-        "event": event,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        **fields,
-    }
-    with open(path, "a") as output_file:
-        output_file.write(json.dumps(entry, default=_serialize_log_value) + "\n")
-
 
 def coordinator(ticket: str) -> TriageReply:
     write_audit_event("received", ticket=ticket)

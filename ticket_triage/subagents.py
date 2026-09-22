@@ -1,6 +1,7 @@
 from anthropic import Anthropic
 from pydantic import ValidationError
 
+from ticket_triage.observability import write_audit_event
 from ticket_triage.schemas import AgentOutcome, Classification
 from ticket_triage.rag import search_docs as _search_docs
 from ticket_triage.tools import (
@@ -112,13 +113,16 @@ def run_agent_loop(
     validation_retries = 0
 
     while True:
-        response = client.messages.create(
-            model=SUBAGENT_MODEL,
-            max_tokens=MAX_TOKENS,
-            system=_cached_system(system_prompt),
-            tools=tool_defs,
-            messages=messages,
-        )
+        try:
+            response = client.messages.create(
+                model=SUBAGENT_MODEL,
+                max_tokens=MAX_TOKENS,
+                system=_cached_system(system_prompt),
+                tools=tool_defs,
+                messages=messages,
+            )
+        except Exception:
+            return AgentOutcome(status="failed")
 
         tool_use_blocks = [
             block for block in response.content if block.type == "tool_use"
@@ -130,30 +134,48 @@ def run_agent_loop(
         )
 
         if response_tool_call is not None:
-            try:
-                return AgentOutcome(**response_tool_call.input)
-            except ValidationError as validation_error:
-                validation_retries += 1
-                if validation_retries > MAX_VALIDATION_RETRIES:
-                    return AgentOutcome(status="failed")
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
+            domain_blocks = [b for b in tool_use_blocks if b.name != RESPONSE_TOOL_NAME]
+            if not domain_blocks:
+                try:
+                    return AgentOutcome(**response_tool_call.input)
+                except ValidationError as validation_error:
+                    validation_retries += 1
+                    if validation_retries > MAX_VALIDATION_RETRIES:
+                        return AgentOutcome(status="failed")
+                    messages.append({"role": "assistant", "content": response.content})
+                    # Every tool_use block in this turn needs a corresponding result.
+                    # Execute domain tools that ran alongside the bad submit_response;
+                    # send an error result for the submit_response itself.
+                    retry_tool_results = []
+                    for block in tool_use_blocks:
+                        if block.name == RESPONSE_TOOL_NAME:
+                            retry_tool_results.append({
                                 "type": "tool_result",
-                                "tool_use_id": response_tool_call.id,
+                                "tool_use_id": block.id,
                                 "content": (
                                     f"Validation error: {validation_error}. "
                                     "Retry with valid input."
                                 ),
                                 "is_error": True,
-                            }
-                        ],
-                    }
-                )
-                continue
+                            })
+                        elif block.name in tool_registry:
+                            try:
+                                domain_input_schema, domain_tool_fn = tool_registry[block.name]
+                                domain_output = domain_tool_fn(domain_input_schema(**block.input))
+                                retry_tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": domain_output.model_dump_json(),
+                                })
+                            except (KeyError, ValidationError):
+                                retry_tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": "Tool execution failed.",
+                                    "is_error": True,
+                                })
+                    messages.append({"role": "user", "content": retry_tool_results})
+                    continue
 
         if not tool_use_blocks:
             raise RuntimeError(
@@ -165,8 +187,26 @@ def run_agent_loop(
 
         tool_results = []
         for block in tool_use_blocks:
+            if block.name == RESPONSE_TOOL_NAME:
+                # Domain tools were co-submitted with submit_response; acknowledge it
+                # and ask the model to re-submit after seeing the domain tool results.
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": (
+                        "Domain tools are being executed first. "
+                        "Please call submit_response again after reviewing the results."
+                    ),
+                })
+                continue
+            if block.name not in tool_registry:
+                return AgentOutcome(status="failed")
             input_schema, tool_fn = tool_registry[block.name]
-            tool_output = tool_fn(input_schema(**block.input))
+            try:
+                tool_output = tool_fn(input_schema(**block.input))
+            except ValidationError:
+                return AgentOutcome(status="failed")
+            write_audit_event("tool_called", tool=block.name, tool_use_id=block.id)
             tool_results.append(
                 {
                     "type": "tool_result",
