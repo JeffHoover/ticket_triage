@@ -14,7 +14,8 @@ from ticket_triage.tools import (
 )
 
 RESPONSE_TOOL_NAME = "submit_response"
-BILLING_MODEL = "claude-sonnet-4-6"
+CLASSIFIER_MODEL = "claude-haiku-4-5-20251001"
+SUBAGENT_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 1024
 MAX_VALIDATION_RETRIES = 2
 # Max messages passed to the API per turn. When exceeded, oldest
@@ -112,7 +113,7 @@ def _run_agent(
 
     while True:
         response = client.messages.create(
-            model=BILLING_MODEL,
+            model=SUBAGENT_MODEL,
             max_tokens=MAX_TOKENS,
             system=_cached_system(system_prompt),
             tools=tool_defs,

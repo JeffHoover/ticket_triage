@@ -3,10 +3,20 @@ import os
 from datetime import datetime, timezone
 from typing import Callable
 
+from anthropic import Anthropic
 from pydantic import BaseModel
 
 from ticket_triage.schemas import Classification, Reply, SubagentResult
-from ticket_triage.subagents import billing_agent, refund_agent, technical_agent
+from ticket_triage.subagents import CLASSIFIER_MODEL, billing_agent, refund_agent, technical_agent
+
+_client: Anthropic | None = None
+
+
+def _get_client() -> Anthropic:
+    global _client
+    if _client is None:
+        _client = Anthropic()
+    return _client
 
 
 def _json_default(obj):
@@ -26,8 +36,25 @@ SUBAGENTS: dict[str, Callable[..., SubagentResult]] = {
 }
 
 
+_CLASSIFY_SYSTEM = (
+    "Classify the support ticket into exactly one domain. "
+    "Respond with a JSON object matching this schema: "
+    '{"domain": "billing"|"technical"|"refund"|"unknown", '
+    '"confidence": 0.0-1.0, "reasoning": "string"}. '
+    "No other text."
+)
+
+
 def classify(ticket: str) -> Classification:
-    raise NotImplementedError
+    client = _get_client()
+    response = client.messages.create(
+        model=CLASSIFIER_MODEL,
+        max_tokens=256,
+        system=_CLASSIFY_SYSTEM,
+        messages=[{"role": "user", "content": ticket}],
+    )
+    text = next(block.text for block in response.content if block.type == "text")
+    return Classification.model_validate_json(text)
 
 
 def escalate(ticket: str, reason: str, **context) -> Reply:
