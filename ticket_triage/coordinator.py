@@ -51,34 +51,36 @@ def escalate(ticket: str, reason: str, **context) -> TriageReply:
     return TriageReply(text="Your ticket has been escalated.", status="escalated", escalation_reason=reason)
 
 
+def outcome_to_reply(outcome: AgentOutcome) -> TriageReply:
+    return TriageReply(text=outcome.reply_draft, status=outcome.status)
+
+
 def retry_or_escalate(
     ticket: str, classification: Classification, retry_count: int
 ) -> TriageReply:
-    if retry_count > MAX_RETRIES:
-        return escalate(
-            ticket,
-            reason="repeated_failure",
-            classification=classification,
-            attempts=retry_count,
+    for attempt in range(retry_count, MAX_RETRIES + 1):
+        write_audit_event(
+            "retry_attempted",
+            retry_count=attempt,
+            ticket=ticket,
+            domain=classification.domain,
         )
-
-    write_audit_event(
-        "retry_attempted",
-        retry_count=retry_count,
-        ticket=ticket,
-        domain=classification.domain,
+        agent_outcome = SUBAGENTS[classification.domain](ticket, classification)
+        write_audit_event("returned", domain=classification.domain, **agent_outcome.model_dump())
+        if agent_outcome.status == "failed":
+            continue
+        if agent_outcome.status == "escalate":
+            return escalate(
+                ticket, reason=agent_outcome.escalation_reason, evidence=agent_outcome.evidence
+            )
+        return outcome_to_reply(agent_outcome)
+    return escalate(
+        ticket,
+        reason="repeated_failure",
+        classification=classification,
+        attempts=MAX_RETRIES + 1,
     )
-    agent_outcome = SUBAGENTS[classification.domain](ticket, classification)
-    write_audit_event("returned", domain=classification.domain, **agent_outcome.model_dump())
-    if agent_outcome.status == "failed":
-        return retry_or_escalate(
-            ticket, classification, retry_count=retry_count + 1
-        )
-    if agent_outcome.status == "escalate":
-        return escalate(
-            ticket, reason=agent_outcome.escalation_reason, evidence=agent_outcome.evidence
-        )
-    return TriageReply(text=agent_outcome.reply_draft, status=agent_outcome.status)
+
 
 def coordinator(ticket: str) -> TriageReply:
     write_audit_event("received", ticket=ticket)
@@ -102,7 +104,4 @@ def coordinator(ticket: str) -> TriageReply:
     if agent_outcome.status == "failed":
         return retry_or_escalate(ticket, classification, retry_count=1)
 
-    return TriageReply(
-        text=agent_outcome.reply_draft,
-        status="resolved" if agent_outcome.status == "resolved" else "needs_info",
-    )
+    return outcome_to_reply(agent_outcome)
