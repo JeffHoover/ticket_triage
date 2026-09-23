@@ -60,9 +60,10 @@ The `/triage` slash command (`.claude/agents/triage.md`) walks through the full 
 
 ```
 ticket_triage/
-  coordinator.py    # classify, dispatch, retry/escalate, write_audit_event
+  coordinator.py    # classify, dispatch, retry/escalate
   subagents.py      # billing_agent, technical_agent, refund_agent; run_agent_loop
   schemas.py        # Classification, AgentOutcome, TriageReply
+  observability.py  # write_audit_event
   tools.py          # find_order_by_id, issue_refund (mock, Pydantic-typed)
   mcp_server.py     # MCP wrapper exposing tools over stdio
   rag.py            # ChromaDB in-memory collection + search_docs
@@ -77,4 +78,4 @@ tests/                  # pytest suite; shared fixtures in tests/conftest.py
 
 ## Status
 
-All 9 pillars complete. 84 tests, 98% line coverage, 74% mutation kill rate (284/384, `rag.py` excluded). See [CLAUDE.md](CLAUDE.md) for design reasoning and the pillar-by-pillar status table.
+All 9 pillars complete. 100 tests, 98% line coverage, 74% mutation kill rate (284/384, `rag.py` excluded). See [CLAUDE.md](CLAUDE.md) for design reasoning and the pillar-by-pillar status table.

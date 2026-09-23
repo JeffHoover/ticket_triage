@@ -25,16 +25,16 @@ Naming suggestions applied and committed. README updated. Responses to all other
 The hook's pedagogical purpose is explicit in CLAUDE.md: pillar 6 is specifically about demonstrating the hooks-vs-prompts tradeoff the exam tests. A Claude Code harness hook that does *not* protect the application runtime is the intended illustration of where that boundary sits and why policy must also live inside the tool.
 
 That said, the bugs within the hook itself are real and worth fixing regardless of intent:
-- **Fails open on absent `amount`**: `tool_input.get("amount", 0)` means a call with no `amount` field passes through silently. Should fail closed (block or raise).
-- **Crashes on non-numeric `amount`**: no type guard before the comparison.
+- ~~**Fails open on absent `amount`**: `tool_input.get("amount", 0)` means a call with no `amount` field passes through silently. Should fail closed (block or raise).~~
+- ~~**Crashes on non-numeric `amount`**: no type guard before the comparison.~~
 
-The policy placement argument (enforcement in the tool, hook as defense-in-depth) is architecturally correct for production. For this project it remains a hook-only demo. Will fix the two bugs within the hook.
+The policy placement argument (enforcement in the tool, hook as defense-in-depth) is architecturally correct for production. For this project it remains a hook-only demo. ~~Will fix the two bugs within the hook.~~ Fixed: absent `amount` now returns `(False, ...)` immediately; non-numeric `amount` caught by `isinstance` before comparison.
 
 ### 4. High — output validation is syntactic, not semantic
 
 **Agree.**
 
-`AgentOutcome` (formerly `SubagentResult`) accepts `status="resolved"` with `reply_draft=None` and `status="escalate"` with `escalation_reason=None`. CLAUDE.md guarantees `TriageReply.text` on escalation is non-None, but that guarantee lives in runtime coordinator logic rather than in the type. A discriminated union — one Pydantic model per outcome, each with its required fields — would make invalid states unrepresentable. Will address.
+~~`AgentOutcome` (formerly `SubagentResult`) accepts `status="resolved"` with `reply_draft=None` and `status="escalate"` with `escalation_reason=None`. CLAUDE.md guarantees `TriageReply.text` on escalation is non-None, but that guarantee lives in runtime coordinator logic rather than in the type. A discriminated union — one Pydantic model per outcome, each with its required fields — would make invalid states unrepresentable. Will address.~~ Fixed: `model_validator(mode="after")` on `AgentOutcome` raises `ValidationError` when `status="resolved"` has no `reply_draft` or `status="escalate"` has no `escalation_reason`.
 
 ### 5. Medium-high — malformed domain tool calls crash instead of structured failures
 
@@ -79,10 +79,10 @@ The policy placement argument (enforcement in the tool, hook as defense-in-depth
 | Finding | Response |
 |---|---|
 | ~~Stop creating new refund-state set in MCP wrapper~~ | ~~Will fix (see finding 1).~~ Fixed. |
-| Replace `AgentOutcome`'s optional-field bag with a discriminated outcome union | Will fix (see finding 4). |
-| Make threshold validation fail closed and enforce in `issue_refund`, not only in hook | Fail-closed bug in hook: will fix. Enforcement inside `issue_refund`: deferred — keeping the hook-only demo intentional per pillar 6; noting production expectation. |
+| ~~Replace `AgentOutcome`'s optional-field bag with a discriminated outcome union~~ | ~~Will fix (see finding 4).~~ Fixed: `model_validator` enforces required fields per status. |
+| ~~Make threshold validation fail closed and enforce in `issue_refund`, not only in hook~~ | ~~Fail-closed bug in hook: will fix.~~ Fixed: absent/non-numeric `amount` both fail closed. Enforcement inside `issue_refund`: deferred — keeping the hook-only demo intentional per pillar 6; noting production expectation. |
 | ~~Extract an `AgentLoop` responsible for tool dispatch, input validation, result pairing, logging, history trimming, and final-response acceptance~~ | ~~Will do. This is the right center-of-mass refactor and directly addresses findings 5, 6, 7, and 8 simultaneously.~~ Done: all behaviors now live in `run_agent_loop` (findings 2, 5, 6, 7, 8 addressed). |
-| Replace recursive `retry_or_escalate()` with a bounded loop | Will do. Recursion is safe at depth 3, but a loop removes the duplicated initial/retry handling. |
+| ~~Replace recursive `retry_or_escalate()` with a bounded loop~~ | ~~Will do. Recursion is safe at depth 3, but a loop removes the duplicated initial/retry handling.~~ Done: `range(retry_count, MAX_RETRIES + 1)` loop; `outcome_to_reply` extracted to remove duplicated conversion in `coordinator`. |
 | Define an `AgentSpec` data-driven subagent | Deferred. Three explicitly defined subagents are more legible for a learning project than an abstraction over three instances. |
 | `OrderRepository`/`RefundService` with persistent idempotency state | Out of scope for a mock-backed demo. Right direction for production. |
 | Inject Anthropic clients and sinks through a service object rather than patching globals | Out of scope. Monkeypatching module globals is adequate for this test surface. |
