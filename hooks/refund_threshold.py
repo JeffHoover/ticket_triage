@@ -22,7 +22,11 @@ def evaluate_refund_threshold(tool_name: str, tool_input: dict) -> tuple[bool, s
     """Return (allowed, reason). allowed=False causes the hook to block."""
     if tool_name != "issue_refund":
         return True, ""
-    amount = tool_input.get("amount", 0)
+    if "amount" not in tool_input:
+        return False, "Refund blocked: amount field is required for threshold check."
+    amount = tool_input["amount"]
+    if not isinstance(amount, (int, float)):
+        return False, f"Refund blocked: amount must be numeric, got {type(amount).__name__}."
     if amount > THRESHOLD:
         return (
             False,

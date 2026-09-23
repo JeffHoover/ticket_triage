@@ -38,3 +38,16 @@ def test_allows_non_refund_tool():
 def test_allows_other_tool_regardless_of_amount_field():
     allowed, _ = evaluate_refund_threshold("find_order_by_id", {"order_id": "ORD-001", "amount": THRESHOLD + 999})
     assert allowed
+
+
+def test_absent_amount_fails_closed():
+    allowed, _ = evaluate_refund_threshold("issue_refund", {"order_id": "ORD-001", "reason": "damaged"})
+    assert not allowed
+
+
+def test_nonnumeric_amount_fails_closed():
+    try:
+        allowed, _ = evaluate_refund_threshold("issue_refund", {"order_id": "ORD-001", "amount": "lots", "reason": "damaged"})
+    except TypeError:
+        allowed = True  # crash = failed open
+    assert not allowed
