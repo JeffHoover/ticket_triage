@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ticket_triage.schemas import AgentOutcome, Classification
+from ticket_triage.schemas import AgentOutcomeBase, Classification
 from ticket_triage.subagents import (
     MAX_VALIDATION_RETRIES,
     RESPONSE_TOOL_NAME,
@@ -55,7 +55,7 @@ def test_technical_agent_returns_result_when_model_immediately_calls_response_to
 
     result = technical_agent("My app keeps crashing", CLASSIFICATION)
 
-    assert isinstance(result, AgentOutcome)
+    assert isinstance(result, AgentOutcomeBase)
     assert result.status == "resolved"
     assert result.reply_draft == "Your connection issue has been resolved."
 

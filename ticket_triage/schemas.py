@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, TypeAdapter
 
 
 class Classification(BaseModel):
@@ -9,19 +9,38 @@ class Classification(BaseModel):
     reasoning: str
 
 
-class AgentOutcome(BaseModel):
-    status: Literal["resolved", "needs_info", "escalate", "failed"]
+class AgentOutcomeBase(BaseModel):
+    """Marker base class — enables isinstance checks across all AgentOutcome variants."""
+
+
+class ResolvedOutcome(AgentOutcomeBase):
+    status: Literal["resolved"] = "resolved"
+    reply_draft: str
+    evidence: list[dict] = Field(default_factory=list)
+
+
+class NeedsInfoOutcome(AgentOutcomeBase):
+    status: Literal["needs_info"] = "needs_info"
     reply_draft: str | None = None
     evidence: list[dict] = Field(default_factory=list)
-    escalation_reason: str | None = None
 
-    @model_validator(mode="after")
-    def _validate_required_fields(self) -> "AgentOutcome":
-        if self.status == "resolved" and self.reply_draft is None:
-            raise ValueError("reply_draft is required when status='resolved'")
-        if self.status == "escalate" and self.escalation_reason is None:
-            raise ValueError("escalation_reason is required when status='escalate'")
-        return self
+
+class EscalateOutcome(AgentOutcomeBase):
+    status: Literal["escalate"] = "escalate"
+    escalation_reason: str
+    evidence: list[dict] = Field(default_factory=list)
+
+
+class FailedOutcome(AgentOutcomeBase):
+    status: Literal["failed"] = "failed"
+
+
+AgentOutcome = Annotated[
+    Union[ResolvedOutcome, NeedsInfoOutcome, EscalateOutcome, FailedOutcome],
+    Field(discriminator="status"),
+]
+
+AGENT_OUTCOME_ADAPTER = TypeAdapter(AgentOutcome)
 
 
 class TriageReply(BaseModel):

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ticket_triage.schemas import AgentOutcome, Classification, TriageReply
+from ticket_triage.schemas import AgentOutcomeBase, Classification, ResolvedOutcome, TriageReply
 
 # Find the project root by walking up until we find the `hooks/` directory.
 # A fixed parent.parent would resolve to mutants/ when mutmut runs tests,
@@ -28,7 +28,7 @@ def stubs(monkeypatch):
         recorded["subagent"].append(
             {"ticket": ticket, "classification": classification}
         )
-        return AgentOutcome(status="resolved", reply_draft="handled")
+        return ResolvedOutcome(reply_draft="handled")
 
     monkeypatch.setattr("ticket_triage.coordinator.escalate", fake_escalate)
     monkeypatch.setattr("ticket_triage.coordinator.write_audit_event", fake_write_audit_event)
@@ -79,9 +79,7 @@ def distinct_subagents(monkeypatch):
             call_log[domain].append(
                 {"ticket": ticket, "classification": classification}
             )
-            return AgentOutcome(
-                status="resolved", reply_draft=f"{domain} handled"
-            )
+            return ResolvedOutcome(reply_draft=f"{domain} handled")
 
         return stub
 
@@ -100,7 +98,7 @@ def observability_environment(monkeypatch):
     """Environment for observability contract tests — real escalate (so its log fires), captured log, queue-driven subagent."""
     events: list[dict] = []
     subagent_calls: list[dict] = []
-    subagent_responses: list[AgentOutcome] = []
+    subagent_responses: list[AgentOutcomeBase] = []
 
     def fake_write_audit_event(event, **fields):
         events.append({"event": event, **fields})
@@ -134,7 +132,7 @@ def observability_environment(monkeypatch):
 def retry_environment(monkeypatch):
     """Queue-driven subagent + stubbed escalate — for retry_or_escalate tests."""
     subagent_calls: list[dict] = []
-    subagent_responses: list[AgentOutcome] = []
+    subagent_responses: list[AgentOutcomeBase] = []
     escalate_calls: list[dict] = []
 
     def fake_subagent(ticket, classification):

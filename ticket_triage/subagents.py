@@ -2,7 +2,7 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from ticket_triage.observability import write_audit_event
-from ticket_triage.schemas import AgentOutcome, Classification
+from ticket_triage.schemas import AGENT_OUTCOME_ADAPTER, AgentOutcome, Classification, FailedOutcome
 from ticket_triage.rag import search_docs as _search_docs
 from ticket_triage.tools import (
     FindOrderByIdInput,
@@ -55,7 +55,7 @@ _RESPONSE_TOOL_DEF = {
         "Submit your final structured response. Call this exactly "
         "once when you're done handling the ticket."
     ),
-    "input_schema": AgentOutcome.model_json_schema(),
+    "input_schema": AGENT_OUTCOME_ADAPTER.json_schema(),
     "cache_control": {"type": "ephemeral"},
 }
 
@@ -138,7 +138,7 @@ def run_agent_loop(
                 messages=messages,
             )
         except Exception:
-            return AgentOutcome(status="failed")
+            return FailedOutcome()
 
         tool_use_blocks = [
             block for block in response.content if block.type == "tool_use"
@@ -153,11 +153,11 @@ def run_agent_loop(
             domain_blocks = [b for b in tool_use_blocks if b.name != RESPONSE_TOOL_NAME]
             if not domain_blocks:
                 try:
-                    return AgentOutcome(**response_tool_call.input)
+                    return AGENT_OUTCOME_ADAPTER.validate_python(response_tool_call.input)
                 except ValidationError as validation_error:
                     validation_retries += 1
                     if validation_retries > MAX_VALIDATION_RETRIES:
-                        return AgentOutcome(status="failed")
+                        return FailedOutcome()
                     messages.append({"role": "assistant", "content": response.content})
                     # Every tool_use block in this turn needs a corresponding result.
                     # Execute domain tools that ran alongside the bad submit_response;
@@ -212,7 +212,7 @@ def run_agent_loop(
                 continue
             tool_result = _dispatch_tool_call(block, tool_registry)
             if tool_result is None:
-                return AgentOutcome(status="failed")
+                return FailedOutcome()
             tool_results.append(tool_result)
 
         messages.append({"role": "user", "content": tool_results})

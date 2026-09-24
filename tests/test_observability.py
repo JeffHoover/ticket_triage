@@ -1,5 +1,11 @@
 from ticket_triage.coordinator import CONFIDENCE_THRESHOLD, MAX_RETRIES, coordinator
-from ticket_triage.schemas import AgentOutcome, Classification
+from ticket_triage.schemas import (
+    Classification,
+    EscalateOutcome,
+    FailedOutcome,
+    NeedsInfoOutcome,
+    ResolvedOutcome,
+)
 
 
 def event_names(events: list[dict]) -> list[str]:
@@ -13,7 +19,7 @@ def test_happy_path_emits_received_classified_returned(
         Classification(domain="billing", confidence=0.9, reasoning="clear")
     )
     observability_environment["queue"].append(
-        AgentOutcome(status="resolved", reply_draft="ok")
+        ResolvedOutcome(reply_draft="ok")
     )
 
     coordinator("ticket text")
@@ -68,7 +74,7 @@ def test_needs_info_path_emits_received_classified_returned(
         Classification(domain="billing", confidence=0.9, reasoning="clear")
     )
     observability_environment["queue"].append(
-        AgentOutcome(status="needs_info", reply_draft="please clarify")
+        NeedsInfoOutcome(reply_draft="please clarify")
     )
 
     coordinator("ticket text")
@@ -87,8 +93,7 @@ def test_subagent_escalate_emits_received_classified_returned_escalated(
         Classification(domain="billing", confidence=0.9, reasoning="clear")
     )
     observability_environment["queue"].append(
-        AgentOutcome(
-            status="escalate",
+        EscalateOutcome(
             escalation_reason="policy_violation",
             evidence=[],
         )
@@ -112,8 +117,8 @@ def test_fail_then_success_emits_retry_attempted_between_returns(
     )
     observability_environment["queue"].extend(
         [
-            AgentOutcome(status="failed"),
-            AgentOutcome(status="resolved", reply_draft="fixed on retry"),
+            FailedOutcome(),
+            ResolvedOutcome(reply_draft="fixed on retry"),
         ]
     )
 
@@ -135,7 +140,7 @@ def test_exhausted_retries_emit_full_retry_trail_then_escalated(
         Classification(domain="billing", confidence=0.9, reasoning="clear")
     )
     for _ in range(MAX_RETRIES + 1):
-        observability_environment["queue"].append(AgentOutcome(status="failed"))
+        observability_environment["queue"].append(FailedOutcome())
 
     coordinator("ticket text")
 
