@@ -57,7 +57,7 @@ Tools are mock external system calls the subagents use to fetch grounded facts a
 
 - **Retry state parameter is `retry_count`, starting at 1.** Not `attempt` (off-by-one ambiguity).
 - **`MAX_RETRIES = 2`** — 2 retries after the coordinator's initial failed call = 3 total attempts. Guard clause escalates *without* calling the subagent when `retry_count > MAX_RETRIES`.
-- **Escalation is coordinator-owned, not subagent-owned.** Subagents *request* escalation via `AgentOutcome(status="escalate", escalation_reason=...)`; the coordinator (or `retry_or_escalate`) executes `escalate()`. Single audit point, single place to enforce top-level policy.
+- **Escalation is coordinator-owned, not subagent-owned.** Subagents *request* escalation via `EscalateOutcome(escalation_reason=...)`; the coordinator (or `retry_or_escalate`) executes `escalate()`. Single audit point, single place to enforce top-level policy.
 - **`TriageReply.text` on escalation is non-None** (customer-facing placeholder). Escalation isn't invisible to the customer.
 - **Log events are structured JSON lines** with `event`, ISO-8601 UTC `timestamp`, and arbitrary fields. Pydantic models serialize via `.model_dump()`; unknown types raise `TypeError` (fail-loud, no silent `str()` fallback).
 - **Log path via `TICKET_TRIAGE_LOG_PATH` env var**, default `./ticket_triage.log.jsonl`.
@@ -112,6 +112,6 @@ All pillars complete. Next: exam prep review.
 
 | 9 | Model routing | Done | `CLASSIFIER_MODEL` (Haiku) for `classify` in `coordinator.py`; `SUBAGENT_MODEL` (Sonnet) for all three subagents in `subagents.py`. Routing is static by step, not by domain — classification is low-stakes/high-volume so Haiku is appropriate; tool-use chains need Sonnet's stronger reasoning. |
 
-105 tests across gates, dispatch, escalate, retry, observability, write_audit_event, find_order_by_id, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, docs chunking, RAG retrieval, search_docs wiring, e2e dispatch, model routing, and `_dispatch_tool_call` unit tests. 98% line coverage, 74% mutation kill rate (see README for how to run).
+114 tests across gates, dispatch, escalate, retry, observability, write_audit_event, find_order_by_id, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, docs chunking, RAG retrieval, search_docs wiring, e2e dispatch, model routing, `_dispatch_tool_call` unit tests, and AgentOutcome discriminated-union variant tests. 98% line coverage, 74% mutation kill rate (see README for how to run).
 
 `_dispatch_tool_call` extracted from `run_agent_loop` in `subagents.py` — handles registry lookup, input validation, tool execution, and audit logging in one place. Both the main dispatch loop and the validation-retry loop delegate to it; each caller owns its own `None`-handling policy (abort vs. degrade). `run_agent_loop` CC dropped from 23 → 21.
