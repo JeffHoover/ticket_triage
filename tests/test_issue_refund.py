@@ -1,10 +1,15 @@
+from decimal import Decimal
+
 import pytest
 from pydantic import ValidationError
 
 from ticket_triage.tools import (
+    FindOrderByIdInput,
+    FindOrderByIdSuccess,
     IssueRefundFailure,
     IssueRefundInput,
     IssueRefundSuccess,
+    find_order_by_id,
     issue_refund,
 )
 
@@ -65,3 +70,18 @@ def test_issue_refund_returns_failure_on_duplicate_refund_for_same_order():
 def test_issue_refund_rejects_non_positive_amount_at_input_validation():
     with pytest.raises(ValidationError):
         IssueRefundInput(order_id="ORD-001", amount=0.00, reason="test")
+
+
+# --- Finding 9: Decimal for money ---
+
+
+def test_order_total_is_decimal():
+    result = find_order_by_id(FindOrderByIdInput(order_id="ORD-001"))
+    assert isinstance(result, FindOrderByIdSuccess)
+    assert isinstance(result.order.total, Decimal)
+
+
+def test_amount_refunded_is_decimal():
+    result = issue_refund(IssueRefundInput(order_id="ORD-001", amount=Decimal("49.99"), reason="test"))
+    assert isinstance(result, IssueRefundSuccess)
+    assert isinstance(result.refund.amount_refunded, Decimal)

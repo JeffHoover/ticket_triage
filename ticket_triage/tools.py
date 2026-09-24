@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -6,7 +7,7 @@ from pydantic import BaseModel, Field, ValidationError
 class Order(BaseModel):
     order_id: str
     customer_id: str
-    total: float
+    total: Decimal
     status: Literal["pending", "shipped", "delivered", "cancelled"]
 
 
@@ -33,7 +34,7 @@ _ORDERS: dict[str, Order] = {
     "ORD-001": Order(
         order_id="ORD-001",
         customer_id="CUST-01",
-        total=100.00,
+        total=Decimal("100.00"),
         status="shipped",
     ),
 }
@@ -68,14 +69,14 @@ class SearchDocsResult(BaseModel):
 
 class IssueRefundInput(BaseModel):
     order_id: str = Field(min_length=1)
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     reason: str = Field(min_length=1)
 
 
 class Refund(BaseModel):
     refund_id: str
     order_id: str
-    amount_refunded: float
+    amount_refunded: Decimal
 
 
 class IssueRefundSuccess(BaseModel):
