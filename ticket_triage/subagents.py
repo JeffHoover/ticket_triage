@@ -199,8 +199,6 @@ def run_agent_loop(
         tool_results = []
         for block in tool_use_blocks:
             if block.name == RESPONSE_TOOL_NAME:
-                # Domain tools were co-submitted with submit_response; acknowledge it
-                # and ask the model to re-submit after seeing the domain tool results.
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
