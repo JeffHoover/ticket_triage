@@ -85,6 +85,22 @@ _TECHNICAL_TOOL_REGISTRY = {
     ),
 }
 
+def _dispatch_tool_call(block, tool_registry: dict) -> dict | None:
+    if block.name not in tool_registry:
+        return None
+    input_schema, tool_fn = tool_registry[block.name]
+    try:
+        tool_output = tool_fn(input_schema(**block.input))
+    except (KeyError, ValidationError):
+        return None
+    write_audit_event("tool_called", tool=block.name, tool_use_id=block.id)
+    return {
+        "type": "tool_result",
+        "tool_use_id": block.id,
+        "content": tool_output.model_dump_json(),
+    }
+
+
 def _get_client() -> Anthropic:
     global _client
     if _client is None:
@@ -158,22 +174,17 @@ def run_agent_loop(
                                 ),
                                 "is_error": True,
                             })
-                        elif block.name in tool_registry:
-                            try:
-                                domain_input_schema, domain_tool_fn = tool_registry[block.name]
-                                domain_output = domain_tool_fn(domain_input_schema(**block.input))
-                                retry_tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": domain_output.model_dump_json(),
-                                })
-                            except (KeyError, ValidationError):
+                        else:
+                            tool_result = _dispatch_tool_call(block, tool_registry)
+                            if tool_result is None:
                                 retry_tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": block.id,
                                     "content": "Tool execution failed.",
                                     "is_error": True,
                                 })
+                            else:
+                                retry_tool_results.append(tool_result)
                     messages.append({"role": "user", "content": retry_tool_results})
                     continue
 
@@ -199,21 +210,10 @@ def run_agent_loop(
                     ),
                 })
                 continue
-            if block.name not in tool_registry:
+            tool_result = _dispatch_tool_call(block, tool_registry)
+            if tool_result is None:
                 return AgentOutcome(status="failed")
-            input_schema, tool_fn = tool_registry[block.name]
-            try:
-                tool_output = tool_fn(input_schema(**block.input))
-            except ValidationError:
-                return AgentOutcome(status="failed")
-            write_audit_event("tool_called", tool=block.name, tool_use_id=block.id)
-            tool_results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": tool_output.model_dump_json(),
-                }
-            )
+            tool_results.append(tool_result)
 
         messages.append({"role": "user", "content": tool_results})
 
