@@ -2,6 +2,15 @@
 
 Routes incoming support tickets to specialized subagents (billing, technical, refund) via a coordinator that classifies each ticket and applies deterministic escalation gates. Built as an exercise for the Anthropic Architect Fundamentals exam.
 
+## Main AI Concepts Demonstrated:
+- agentic orchestration
+- tool use
+- structured outputs
+- deterministic guardrails and human escalation
+- MCP
+- RAG/retrieval
+
+
 ## Setup
 
 Requires Python 3.14 (Homebrew).
