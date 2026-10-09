@@ -25,6 +25,7 @@ MAX_VALIDATION_RETRIES = 2
 # assistant+tool-result pairs are dropped to keep the context bounded while
 # preserving messages[0] (the original ticket) and role alternation.
 MAX_HISTORY_MESSAGES = 10
+MAX_TURNS = 10
 
 BILLING_SYSTEM_PROMPT = (
     "You are a billing support specialist. Use the available tools to look "
@@ -158,8 +159,12 @@ def run_agent_loop(
         }
     ]
     validation_retries = 0
+    turn_count = 0
 
     while True:
+        turn_count += 1
+        if turn_count > MAX_TURNS:
+            return FailedOutcome()
         try:
             response = client.messages.create(
                 model=SUBAGENT_MODEL,

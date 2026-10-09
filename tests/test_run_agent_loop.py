@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from ticket_triage.schemas import Classification
-from ticket_triage.subagents import RESPONSE_TOOL_NAME, _response_input_schema, billing_agent
+from ticket_triage.subagents import MAX_TURNS, RESPONSE_TOOL_NAME, _response_input_schema, billing_agent
 
 CLASSIFICATION = Classification(domain="billing", confidence=0.9, reasoning="test")
 
@@ -235,6 +235,25 @@ def test_response_tool_schema_status_is_required():
 def test_response_tool_schema_status_enum_contains_all_variants():
     enum = _response_input_schema["properties"]["status"]["enum"]
     assert set(enum) == {"resolved", "needs_info", "escalate", "failed"}
+
+
+# ── Infinite loop guard ────────────────────────────────────────────────────
+# Without a turn cap, a model that never calls submit_response loops forever.
+# The loop must return FailedOutcome() after MAX_TURNS iterations.
+
+def test_run_agent_loop_returns_failed_after_max_turns_without_submit_response(monkeypatch):
+    domain_only = _message_response([
+        _tool_use_block("find_order_by_id", {"order_id": "ORD-001"}, "tool-domain")
+    ])
+    fake_client = MagicMock()
+    # Provide more responses than MAX_TURNS so the test terminates even without the guard.
+    fake_client.messages.create.side_effect = [domain_only] * (MAX_TURNS + 5)
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    result = billing_agent("ticket", CLASSIFICATION)
+
+    assert result.status == "failed"
+    assert fake_client.messages.create.call_count <= MAX_TURNS + 1
 
 
 # ── Finding 8 ──────────────────────────────────────────────────────────────
