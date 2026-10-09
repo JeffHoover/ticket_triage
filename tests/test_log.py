@@ -62,6 +62,11 @@ def test_write_audit_event_defaults_to_project_relative_path_when_env_unset(
     assert lines[0]["event"] == "received"
 
 
+def test_write_audit_event_raises_type_error_naming_the_offending_type(log_path):
+    with pytest.raises(TypeError, match="Object of type set is not JSON serializable"):
+        write_audit_event("received", bad_field={1, 2, 3})
+
+
 def test_write_audit_event_serializes_pydantic_model_field_as_nested_dict(log_path):
     classification = Classification(
         domain="billing", confidence=0.9, reasoning="clear signal"

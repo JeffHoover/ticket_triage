@@ -13,6 +13,7 @@ import pytest
 from ticket_triage.schemas import AgentOutcomeBase, Classification
 from ticket_triage.subagents import (
     MAX_VALIDATION_RETRIES,
+    REFUND_SYSTEM_PROMPT,
     RESPONSE_TOOL_NAME,
     refund_agent,
 )
@@ -177,6 +178,44 @@ def test_refund_agent_raises_when_model_returns_no_tool_use(monkeypatch):
 
     with pytest.raises(RuntimeError):
         refund_agent("ticket", CLASSIFICATION)
+
+
+def test_refund_agent_passes_ticket_text_in_first_message(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _message_response(
+        content_blocks=[
+            _tool_use_block(
+                name=RESPONSE_TOOL_NAME,
+                tool_input={"status": "resolved", "reply_draft": "Done.", "evidence": []},
+            )
+        ],
+        stop_reason="tool_use",
+    )
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    refund_agent("I returned my item two weeks ago", CLASSIFICATION)
+
+    kwargs = fake_client.messages.create.call_args.kwargs
+    assert "I returned my item two weeks ago" in kwargs["messages"][0]["content"]
+
+
+def test_refund_agent_passes_refund_system_prompt(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _message_response(
+        content_blocks=[
+            _tool_use_block(
+                name=RESPONSE_TOOL_NAME,
+                tool_input={"status": "resolved", "reply_draft": "Done.", "evidence": []},
+            )
+        ],
+        stop_reason="tool_use",
+    )
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    refund_agent("ticket", CLASSIFICATION)
+
+    kwargs = fake_client.messages.create.call_args.kwargs
+    assert kwargs["system"][0]["text"] == REFUND_SYSTEM_PROMPT
 
 
 def test_refund_agent_has_both_find_order_by_id_and_issue_refund_tools(monkeypatch):

@@ -139,6 +139,63 @@ def test_run_agent_loop_returns_failed_on_sdk_exception(monkeypatch):
 # Tool dispatch is not logged. The observability contract in CLAUDE.md says
 # every tool call is logged, but run_agent_loop emits no log events.
 
+# ── Mutant 161 ─────────────────────────────────────────────────────────────
+# The retry path is only entered when submit_response has no domain tools
+# alongside it (guarded by `if not domain_blocks:`). So `tool_use_blocks`
+# contains only submit_response blocks. The condition `block.name == RESPONSE_TOOL_NAME`
+# on line 167 must route the block to the validation-error result. Inverting it
+# (`!=`) sends submit_response to `else:` → dispatches it (not in registry →
+# None → "Tool execution failed.") instead of the validation error.
+
+def test_validation_retry_result_contains_validation_error_not_tool_failure(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.side_effect = [
+        # Only submit_response with invalid input — no domain tools, so the
+        # retry path (`if not domain_blocks:`) is entered.
+        _message_response([
+            _tool_use_block(RESPONSE_TOOL_NAME, {"status": "not_a_real_status"}, "tool-bad"),
+        ]),
+        _resolved_submit("tool-final"),
+    ]
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_agent("ticket", CLASSIFICATION)
+
+    retry_turn = fake_client.messages.create.call_args_list[1].kwargs["messages"][-1]
+    result_by_id = {entry["tool_use_id"]: entry for entry in retry_turn["content"]}
+
+    assert "Validation error" in result_by_id["tool-bad"]["content"]
+
+
+# ── Mutant 197 ──────────────────────────────────────────────────────────────
+# `continue` → `break` in the main tool-dispatch loop. When submit_response
+# appears before a domain tool in the response, `break` exits the loop and the
+# domain tool is never dispatched.
+
+def test_domain_tool_dispatched_when_submit_response_appears_first_in_block(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.side_effect = [
+        _message_response([
+            _tool_use_block(
+                RESPONSE_TOOL_NAME,
+                {"status": "resolved", "reply_draft": "Done.", "evidence": []},
+                "tool-response",
+            ),
+            _tool_use_block("find_order_by_id", {"order_id": "ORD-001"}, "tool-domain"),
+        ]),
+        _resolved_submit("tool-final"),
+    ]
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_agent("ticket", CLASSIFICATION)
+
+    assert fake_client.messages.create.call_count == 2
+    second_call_turn = fake_client.messages.create.call_args_list[1].kwargs["messages"][-1]
+    tool_result_ids = {entry["tool_use_id"] for entry in second_call_turn["content"]}
+    assert "tool-domain" in tool_result_ids
+
+
+# ── Finding 8 ──────────────────────────────────────────────────────────────
 def test_run_agent_loop_logs_tool_calls(monkeypatch, tmp_path):
     log_path = tmp_path / "triage.jsonl"
     monkeypatch.setenv("TICKET_TRIAGE_LOG_PATH", str(log_path))

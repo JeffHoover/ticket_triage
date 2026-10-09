@@ -91,3 +91,29 @@ def test_run_agent_loop_caps_message_history_by_dropping_oldest_tool_result_pair
                 f"Call {call_index}, messages[{i}]: "
                 f"role={msg['role']!r}, expected {expected_role!r}"
             )
+
+
+# ── Mutant 205 ──────────────────────────────────────────────────────────────
+# `del messages[1:3]` → `del messages[1:4]` removes 3 messages instead of 2.
+# Removing an odd count from an odd-length list produces an even-length list
+# where messages[1] is a user message instead of assistant, breaking alternation
+# on every subsequent API call.
+
+def test_history_trim_removes_exactly_one_pair_preserving_role_alternation(monkeypatch):
+    # 5 tool rounds grow messages to 11 (> MAX_HISTORY_MESSAGES=10) → trim fires.
+    # The submit_response round (API call index 5) receives the post-trim list.
+    num_tool_rounds = 5
+    fake_client = MagicMock()
+    fake_client.messages.create.side_effect = [
+        _find_order_by_id_response(block_id=f"tool-{i}") for i in range(num_tool_rounds)
+    ] + [_submit_response()]
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_agent("Refund ORD-001", CLASSIFICATION)
+
+    post_trim_messages = fake_client.messages.create.call_args_list[5].kwargs["messages"]
+    for i, msg in enumerate(post_trim_messages):
+        expected = "user" if i % 2 == 0 else "assistant"
+        assert msg["role"] == expected, (
+            f"post-trim messages[{i}]: role={msg['role']!r}, expected {expected!r}"
+        )

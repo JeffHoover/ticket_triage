@@ -12,8 +12,7 @@ def test_escalate_returns_reply_with_escalated_status(recorded_log):
 def test_escalate_reply_includes_customer_facing_text(recorded_log):
     reply = escalate("customer ticket text", reason="low_confidence")
 
-    assert reply.text is not None
-    assert reply.text.strip() != ""
+    assert reply.text == "Your ticket has been escalated."
 
 
 def test_escalate_emits_log_event_with_ticket_and_reason(recorded_log):

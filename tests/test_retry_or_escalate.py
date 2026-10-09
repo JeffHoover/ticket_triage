@@ -82,10 +82,50 @@ def test_subagent_escalate_status_forwarded_without_retry(retry_environment):
     assert len(retry_environment["subagent_calls"]) == 1
     assert len(retry_environment["escalate_calls"]) == 1
     escalate_call = retry_environment["escalate_calls"][0]
+    assert escalate_call["ticket"] == "ticket text"
     assert escalate_call["reason"] == "policy_violation"
     assert escalate_call["evidence"] == [
         {"tool": "find_order_by_id", "result": "flagged"}
     ]
+
+
+def test_retry_passes_ticket_and_classification_to_subagent(retry_environment):
+    retry_environment["queue"].append(ResolvedOutcome(reply_draft="done"))
+
+    retry_or_escalate("ticket text", CLASSIFICATION, retry_count=1)
+
+    call = retry_environment["subagent_calls"][0]
+    assert call["ticket"] == "ticket text"
+    assert call["classification"] == CLASSIFICATION
+
+
+def test_retry_attempted_audit_event_includes_retry_count_ticket_and_domain(
+    retry_environment,
+):
+    retry_environment["queue"].append(ResolvedOutcome(reply_draft="done"))
+
+    retry_or_escalate("ticket text", CLASSIFICATION, retry_count=1)
+
+    retry_events = [
+        e for e in retry_environment["audit_events"] if e["event"] == "retry_attempted"
+    ]
+    assert len(retry_events) == 1
+    assert retry_events[0]["retry_count"] == 1
+    assert retry_events[0]["ticket"] == "ticket text"
+    assert retry_events[0]["domain"] == CLASSIFICATION.domain
+
+
+def test_returned_audit_event_includes_domain_and_outcome_fields(retry_environment):
+    retry_environment["queue"].append(ResolvedOutcome(reply_draft="done"))
+
+    retry_or_escalate("ticket text", CLASSIFICATION, retry_count=1)
+
+    returned_events = [
+        e for e in retry_environment["audit_events"] if e["event"] == "returned"
+    ]
+    assert len(returned_events) == 1
+    assert returned_events[0]["domain"] == CLASSIFICATION.domain
+    assert returned_events[0]["status"] == "resolved"
 
 
 def test_needs_info_returned_without_retry(retry_environment):

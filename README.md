@@ -44,6 +44,18 @@ pytest --cov=ticket_triage --cov-report=term-missing tests/
 mutmut run
 ```
 
+Re-run all mutations without skipping previously-killed ones (reuses the existing mutation set):
+
+```
+mutmut run --rerun-all
+```
+
+Full clean slate — deletes the cache and results DB so mutmut regenerates the mutation set from scratch. Use this after significant source changes:
+
+```
+rm -f .mutmut-cache mutmut-results.db && mutmut run
+```
+
 Current: 98% line coverage, 74% mutation kill rate (284/384). `rag.py` is excluded from mutation testing — ChromaDB's module-level singleton is inherited by mutmut's forked workers, making mutations unreachable and causing suspicious exits from background threads (see `pyproject.toml`). Remaining survivors are mostly error-message string mutations in the coordinator.
 
 ## Run

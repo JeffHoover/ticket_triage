@@ -1,3 +1,5 @@
+import os
+
 from anthropic import Anthropic
 from pydantic import ValidationError
 
@@ -49,13 +51,40 @@ _ISSUE_REFUND_DEF = {
     "input_schema": IssueRefundInput.model_json_schema(),
 }
 
+# Flat schema required: Anthropic API rejects top-level oneOf/allOf/anyOf in tool input_schema.
+# Pydantic's TypeAdapter generates a oneOf discriminated-union schema, which the API won't accept.
+# We hand-write a flat object schema here; AGENT_OUTCOME_ADAPTER.validate_python() still enforces
+# the discriminated-union rules when the model's tool call comes back.
+_response_input_schema = {
+    "type": "object",
+    "properties": {
+        "status": {
+            "type": "string",
+            "enum": ["resolved", "needs_info", "escalate", "failed"],
+        },
+        "reply_draft": {
+            "type": "string",
+            "description": "Customer-facing reply. Required when status='resolved'; optional for needs_info.",
+        },
+        "escalation_reason": {
+            "type": "string",
+            "description": "Reason for escalation. Required when status='escalate'.",
+        },
+        "evidence": {
+            "type": "array",
+            "items": {"type": "object", "additionalProperties": True},
+        },
+    },
+    "required": ["status"],
+}
+
 _RESPONSE_TOOL_DEF = {
     "name": RESPONSE_TOOL_NAME,
     "description": (
         "Submit your final structured response. Call this exactly "
         "once when you're done handling the ticket."
     ),
-    "input_schema": AGENT_OUTCOME_ADAPTER.json_schema(),
+    "input_schema": _response_input_schema,
     "cache_control": {"type": "ephemeral"},
 }
 
@@ -104,7 +133,9 @@ def _dispatch_tool_call(block, tool_registry: dict) -> dict | None:
 def _get_client() -> Anthropic:
     global _client
     if _client is None:
-        _client = Anthropic()
+        workspace_id = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+        headers = {"anthropic-workspace-id": workspace_id} if workspace_id else {}
+        _client = Anthropic(default_headers=headers)
     return _client
 
 
@@ -135,6 +166,7 @@ def run_agent_loop(
                 max_tokens=MAX_TOKENS,
                 system=_cached_system(system_prompt),
                 tools=tool_defs,
+                tool_choice={"type": "any"},
                 messages=messages,
             )
         except Exception:

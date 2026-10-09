@@ -5,6 +5,7 @@ import pytest
 
 from ticket_triage.schemas import AgentOutcomeBase, Classification
 from ticket_triage.subagents import (
+    BILLING_SYSTEM_PROMPT,
     MAX_VALIDATION_RETRIES,
     RESPONSE_TOOL_NAME,
     billing_agent,
@@ -171,6 +172,44 @@ def test_billing_agent_raises_when_model_returns_no_tool_use(monkeypatch):
 
     with pytest.raises(RuntimeError):
         billing_agent("ticket", CLASSIFICATION)
+
+
+def test_billing_agent_passes_ticket_text_in_first_message(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _message_response(
+        content_blocks=[
+            _tool_use_block(
+                name=RESPONSE_TOOL_NAME,
+                tool_input={"status": "resolved", "reply_draft": "Done.", "evidence": []},
+            )
+        ],
+        stop_reason="tool_use",
+    )
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_agent("I was charged twice for ORD-001", CLASSIFICATION)
+
+    kwargs = fake_client.messages.create.call_args.kwargs
+    assert "I was charged twice for ORD-001" in kwargs["messages"][0]["content"]
+
+
+def test_billing_agent_passes_billing_system_prompt(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _message_response(
+        content_blocks=[
+            _tool_use_block(
+                name=RESPONSE_TOOL_NAME,
+                tool_input={"status": "resolved", "reply_draft": "Done.", "evidence": []},
+            )
+        ],
+        stop_reason="tool_use",
+    )
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_agent("ticket", CLASSIFICATION)
+
+    kwargs = fake_client.messages.create.call_args.kwargs
+    assert kwargs["system"][0]["text"] == BILLING_SYSTEM_PROMPT
 
 
 def test_billing_agent_sends_cached_system_prompt_and_tools(monkeypatch):

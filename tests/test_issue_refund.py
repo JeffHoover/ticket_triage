@@ -85,3 +85,24 @@ def test_amount_refunded_is_decimal():
     result = issue_refund(IssueRefundInput(order_id="ORD-001", amount=Decimal("49.99"), reason="test"))
     assert isinstance(result, IssueRefundSuccess)
     assert isinstance(result.refund.amount_refunded, Decimal)
+
+
+def test_issue_refund_succeeds_when_amount_equals_order_total():
+    result = issue_refund(
+        IssueRefundInput(order_id="ORD-001", amount=Decimal("100.00"), reason="full refund")
+    )
+
+    assert isinstance(result, IssueRefundSuccess)
+    assert result.refund.amount_refunded == Decimal("100.00")
+
+
+def test_issue_refund_injected_refunded_set_overrides_global():
+    already_refunded = {"ORD-001"}
+
+    result = issue_refund(
+        IssueRefundInput(order_id="ORD-001", amount=Decimal("50.00"), reason="test"),
+        refunded_order_ids=already_refunded,
+    )
+
+    assert isinstance(result, IssueRefundFailure)
+    assert result.error.code == "already_refunded"

@@ -1,3 +1,5 @@
+import os
+import re
 from typing import Callable
 
 from anthropic import Anthropic
@@ -12,7 +14,9 @@ _client: Anthropic | None = None
 def _get_client() -> Anthropic:
     global _client
     if _client is None:
-        _client = Anthropic()
+        workspace_id = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+        headers = {"anthropic-workspace-id": workspace_id} if workspace_id else {}
+        _client = Anthropic(default_headers=headers)
     return _client
 
 CONFIDENCE_THRESHOLD = 0.7
@@ -43,6 +47,8 @@ def classify(ticket: str) -> Classification:
         messages=[{"role": "user", "content": ticket}],
     )
     text = next(block.text for block in response.content if block.type == "text")
+    # Strip markdown fences the model sometimes wraps around JSON despite instructions
+    text = re.sub(r"^```(?:json)?\s*\n?|\n?```\s*$", "", text).strip()
     return Classification.model_validate_json(text)
 
 

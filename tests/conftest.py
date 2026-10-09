@@ -155,13 +155,17 @@ def retry_environment(monkeypatch):
             "refund": fake_subagent,
         },
     )
+    audit_events: list[dict] = []
+
+    def fake_write_audit_event(event, **fields):
+        audit_events.append({"event": event, **fields})
+
     monkeypatch.setattr("ticket_triage.coordinator.escalate", fake_escalate)
-    monkeypatch.setattr(
-        "ticket_triage.coordinator.write_audit_event", lambda event, **fields: None
-    )
+    monkeypatch.setattr("ticket_triage.coordinator.write_audit_event", fake_write_audit_event)
 
     return {
         "queue": subagent_responses,
         "subagent_calls": subagent_calls,
         "escalate_calls": escalate_calls,
+        "audit_events": audit_events,
     }
