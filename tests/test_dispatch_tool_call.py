@@ -26,6 +26,7 @@ def test_returns_tool_result_dict_on_success():
     assert result is not None
     assert result["type"] == "tool_result"
     assert result["tool_use_id"] == "tool-1"
+    assert result["content"] == '{"ok": true}'
 
 
 def test_returns_none_for_unknown_tool_name():

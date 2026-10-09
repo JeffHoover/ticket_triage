@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from ticket_triage.schemas import Classification
-from ticket_triage.subagents import RESPONSE_TOOL_NAME, billing_agent
+from ticket_triage.subagents import RESPONSE_TOOL_NAME, _response_input_schema, billing_agent
 
 CLASSIFICATION = Classification(domain="billing", confidence=0.9, reasoning="test")
 
@@ -193,6 +193,48 @@ def test_domain_tool_dispatched_when_submit_response_appears_first_in_block(monk
     second_call_turn = fake_client.messages.create.call_args_list[1].kwargs["messages"][-1]
     tool_result_ids = {entry["tool_use_id"] for entry in second_call_turn["content"]}
     assert "tool-domain" in tool_result_ids
+
+
+# ── Live-run fix: tool_choice=any ──────────────────────────────────────────
+# Without tool_choice={"type": "any"}, the model can return end_turn with no
+# tool_use blocks. The loop's raise RuntimeError was never hit in tests because
+# mock responses always included tool_use blocks.
+
+def test_run_agent_loop_passes_tool_choice_any(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = _resolved_submit()
+    monkeypatch.setattr("ticket_triage.subagents._client", fake_client)
+
+    billing_agent("ticket", CLASSIFICATION)
+
+    assert fake_client.messages.create.call_args.kwargs["tool_choice"] == {"type": "any"}
+
+
+# ── Live-run fix: flat submit_response input_schema ────────────────────────
+# AGENT_OUTCOME_ADAPTER.json_schema() produces a top-level oneOf discriminated
+# union. The Anthropic API rejects top-level oneOf in tool input_schema.
+# We hand-write a flat object schema instead; Pydantic still validates the
+# model's actual tool call via AGENT_OUTCOME_ADAPTER.validate_python().
+
+def test_response_tool_schema_has_object_type_at_top_level():
+    assert _response_input_schema.get("type") == "object"
+
+
+def test_response_tool_schema_has_no_top_level_oneof():
+    assert "oneOf" not in _response_input_schema
+
+
+def test_response_tool_schema_has_required_properties_key():
+    assert "properties" in _response_input_schema
+
+
+def test_response_tool_schema_status_is_required():
+    assert "status" in _response_input_schema["required"]
+
+
+def test_response_tool_schema_status_enum_contains_all_variants():
+    enum = _response_input_schema["properties"]["status"]["enum"]
+    assert set(enum) == {"resolved", "needs_info", "escalate", "failed"}
 
 
 # ── Finding 8 ──────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -51,3 +52,23 @@ def test_classify_passes_correct_kwargs_to_messages_create(monkeypatch):
 def test_classifier_model_is_cheaper_than_subagent_model():
     assert "haiku" in CLASSIFIER_MODEL
     assert "haiku" not in SUBAGENT_MODEL
+
+
+def test_classify_strips_markdown_fences_from_response(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="text",
+                text="```json\n" + json.dumps(
+                    {"domain": "billing", "confidence": 0.9, "reasoning": "double-charge"}
+                ) + "\n```",
+            )
+        ],
+        stop_reason="end_turn",
+    )
+    monkeypatch.setattr("ticket_triage.coordinator._client", fake_client)
+
+    result = classify("I was charged twice for order ORD-001")
+
+    assert result.domain == "billing"
