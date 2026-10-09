@@ -112,7 +112,14 @@ All pillars complete. Next: exam prep review.
 
 | 9 | Model routing | Done | `CLASSIFIER_MODEL` (Haiku) for `classify` in `coordinator.py`; `SUBAGENT_MODEL` (Sonnet) for all three subagents in `subagents.py`. Routing is static by step, not by domain — classification is low-stakes/high-volume so Haiku is appropriate; tool-use chains need Sonnet's stronger reasoning. |
 
-125 tests across gates, dispatch, escalate, retry, observability, write_audit_event, find_order_by_id, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, docs chunking, RAG retrieval, search_docs wiring, e2e dispatch, model routing, `_dispatch_tool_call` unit tests, AgentOutcome discriminated-union variant tests, Decimal money type tests, and live-run fix tests (markdown fence stripping, flat tool schema, `tool_choice`). 98% line coverage, 57% mutation kill rate (240/418) (see README for how to run).
+152 tests across gates, dispatch, escalate, retry, observability, write_audit_event, find_order_by_id, issue_refund, MCP server, billing/technical/refund agents, refund threshold hook, history cap, docs chunking, RAG retrieval, search_docs wiring, e2e dispatch, model routing, `_dispatch_tool_call` unit tests, AgentOutcome discriminated-union variant tests, Decimal money type tests, live-run fix tests (markdown fence stripping, flat tool schema, `tool_choice`), infinite-loop guard, and eval harness mechanics. 98% line coverage, 57% mutation kill rate (240/418) (see README for how to run).
+
+An eval harness lives in `ticket_triage/evals.py`. `run_evals(grade=False)` runs 5 labeled tickets through the real coordinator and scores domain accuracy and status accuracy (code-based, deterministic). Pass `grade=True` to also run a Claude-as-judge (Haiku) pass that scores each reply draft 1–5 for quality. The two eval types reflect a deliberate split: code-based evals for anything with an exact expected answer (domain, status), model-graded for natural-language quality where exact match is meaningless. Run with:
+
+```python
+from ticket_triage.evals import run_evals, print_report
+print_report(run_evals(grade=True))
+```
 
 The kill rate dropped from 74% (284/384) when the first live API run exposed three real-API bugs requiring new code: a flat `_response_input_schema` dict (replacing the Pydantic-generated `oneOf` schema the API rejects) and workspace ID header injection in `_get_client()`. The dict's string-literal mutations (property names, description text) and the infrastructure-only header branches are the main survivor pool — testing them would mean asserting dict literals equal themselves or asserting on third-party constructor arguments, both low-signal and brittle.
 

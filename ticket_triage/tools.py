@@ -37,6 +37,12 @@ _ORDERS: dict[str, Order] = {
         total=Decimal("100.00"),
         status="shipped",
     ),
+    "ORD-002": Order(
+        order_id="ORD-002",
+        customer_id="CUST-02",
+        total=Decimal("49.99"),
+        status="delivered",
+    ),
 }
 
 
